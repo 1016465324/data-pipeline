@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- mapper:根标签，namespace：命名空间，随便写，一般保证命名空间唯一 -->
+<mapper namespace="com.clinbrain.mapper.cache.CacheTableMetaMapper">
+    <resultMap id="BaseResultMap" type="com.clinbrain.model.cache.CacheTableMeta">
+        <result column="table_name" jdbcType="VARCHAR" property="tableName" />
+        <result column="column_name" jdbcType="VARCHAR" property="columnName" />
+        <result column="column_id" jdbcType="INTEGER" property="columnId" />
+        <result column="data_type" jdbcType="VARCHAR" property="dataType" />
+        <result column="charlength" jdbcType="INTEGER" property="charLength" />
+        <result column="data_precision" jdbcType="INTEGER" property="dataPrecision" />
+        <result column="data_scale" jdbcType="INTEGER" property="dataScale" />
+        <result column="is_pk" jdbcType="VARCHAR" property="isPk" />
+        <result column="virtual_column" jdbcType="VARCHAR" property="virtualColumn" />
+        <result column="default_value" jdbcType="VARCHAR" property="defaultValue" />
+        <result column="nullable" jdbcType="VARCHAR" property="nullable" />
+        <result column="comments" jdbcType="VARCHAR" property="comments" />
+    </resultMap>
+    <select id="selectAllTableMeta" parameterType="java.lang.String" resultMap="BaseResultMap">
+      SELECT
+   col.TABLE_NAME as table_name
+  ,col.COLUMN_NAME as column_name
+  ,col.ORDINAL_POSITION as column_id
+  ,col.DATA_TYPE as data_type
+  ,col.CHARACTER_MAXIMUM_LENGTH as charlength
+  ,col.NUMERIC_PRECISION as data_precision
+  ,col.NUMERIC_SCALE as data_scale
+  ,col.PRIMARY_KEY as is_pk
+  ,col.IS_GENERATED as virtual_column
+  ,col.COLUMN_DEFAULT as default_value
+  ,col.IS_NULLABLE as nullable
+  ,col.DESCRIPTION as comments
+  FROM INFORMATION_SCHEMA.COLUMNS col
+  WHERE col.TABLE_SCHEMA = #{schemaName,jdbcType=VARCHAR}
+   </select>
+</mapper>

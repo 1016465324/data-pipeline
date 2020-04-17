@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- mapper:根标签，namespace：命名空间，随便写，一般保证命名空间唯一 -->
+<mapper namespace="com.clinbrain.mapper.cache.CacheStorageSubSubscriptMapper">
+    <resultMap id="BaseResultMap" type="com.clinbrain.model.cache.CacheStorageSubSubscript">
+        <result column="class_name" jdbcType="VARCHAR" property="className" />
+        <result column="storage_name" jdbcType="VARCHAR" property="storageName" />
+        <result column="access_type" jdbcType="VARCHAR" property="accessType" />
+        <result column="delimiter" jdbcType="VARCHAR" property="delimiter" />
+        <result column="expression" jdbcType="VARCHAR" property="expression" />
+        <result column="name" jdbcType="VARCHAR" property="name" />
+    </resultMap>
+    <select id="selectAllStorageSubSubscript" resultMap="BaseResultMap">
+      SELECT cls.ID as class_name,
+sub.parent as storage_name,
+sub.AccessType as access_type,
+sub.Delimiter as delimiter,
+sub.Expression as expression,
+sub.Name as name
+  FROM   %Dictionary.CompiledClass cls
+  INNER JOIN %Dictionary.CompiledStorage storage
+  ON cls.ID=storage.parent
+  INNER JOIN %Dictionary.CompiledStorageSQLMap sqlmap
+  ON sqlmap.parent= storage.ID1
+  AND sqlmap.Type='data'
+  INNER JOIN %Dictionary.CompiledStorageSQLMapSub sub
+  ON sqlmap.ID=sub.parent
+  WHERE CHARINDEX('%',cls.ID)=0
+  AND storage.Type='%Library.CacheSQLStorage'
+   </select>
+</mapper>

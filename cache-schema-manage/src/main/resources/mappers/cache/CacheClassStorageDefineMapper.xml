@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- mapper:根标签，namespace：命名空间，随便写，一般保证命名空间唯一 -->
+<mapper namespace="com.clinbrain.mapper.cache.CacheClassStorageDefineMapper">
+    <resultMap id="BaseResultMap" type="com.clinbrain.model.cache.CacheClassStorageDefine">
+        <result column="class_name" jdbcType="VARCHAR" property="className" />
+        <result column="storage_id" jdbcType="VARCHAR" property="storageId" />
+        <result column="storage_name" jdbcType="VARCHAR" property="storageName" />
+        <result column="sql_rowid_name" jdbcType="VARCHAR" property="sqlRowidName" />
+        <result column="sql_child_sub" jdbcType="VARCHAR" property="sqlChildSub" />
+        <result column="data_location" jdbcType="VARCHAR" property="dataLocation" />
+        <result column="storage_type" jdbcType="VARCHAR" property="storageType" />
+        <result column="stream_location" jdbcType="VARCHAR" property="streamLocation" />
+    </resultMap>
+    <select id="selectAllClassStorageDefine" resultMap="BaseResultMap">
+      SELECT
+    cls.ID as class_name
+   ,storage.ID1 as storage_id
+   ,storagedata.ID as storage_name
+   ,isnull(cls.SqlRowIdName,storage.SqlRowIdName) as sql_rowid_name
+   ,storage.SqlChildSub as sql_child_sub
+   ,storage.DataLocation as data_location
+   ,storage.Type as storage_type
+   ,storage.StreamLocation as stream_location
+  FROM  %Dictionary.CompiledClass cls
+  INNER JOIN %Dictionary.CompiledStorage storage
+  ON cls.ID=storage.parent
+  INNER JOIN %Dictionary.CompiledStorageData storagedata
+  ON storagedata.parent= storage.ID1
+  AND storagedata.Structure='listnode'
+  WHERE charindex('%',cls.ID)=0
+  AND storage.Type IN ('%Library.CacheStorage','%Library.CacheSerialState')
+  UNION
+  SELECT
+   cls.ID as class_name
+  ,storage.ID1 as storage_id
+  ,sqlmap.ID as storage_name
+  ,isnull(cls.SqlRowIdName,storage.SqlRowIdName) as sql_rowid_name
+  ,storage.SqlChildSub as sql_child_sub
+  ,sqlmap._Global as data_location
+  ,storage.Type as storage_type
+  ,storage.StreamLocation as stream_location
+  FROM  %Dictionary.CompiledClass cls
+  INNER JOIN %Dictionary.CompiledStorage storage
+  ON cls.ID=storage.parent
+  INNER JOIN %Dictionary.CompiledStorageSQLMap sqlmap
+  ON sqlmap.parent= storage.ID1
+  AND sqlmap.Type='data'
+  WHERE charindex('%',cls.ID)=0
+  AND storage.Type='%Library.CacheSQLStorage'
+   </select>
+</mapper>

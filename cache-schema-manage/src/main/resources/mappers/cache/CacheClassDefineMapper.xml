@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- mapper:根标签，namespace：命名空间，随便写，一般保证命名空间唯一 -->
+<mapper namespace="com.clinbrain.mapper.cache.CacheClassDefineMapper">
+    <resultMap id="BaseResultMap" type="com.clinbrain.model.cache.CacheClassDefine">
+        <result column="class_name" jdbcType="VARCHAR" property="className" />
+        <result column="class_type" jdbcType="VARCHAR" property="classType" />
+        <result column="client_data_type" jdbcType="VARCHAR" property="clientDataType" />
+        <result column="class_super" jdbcType="VARCHAR" property="classSuper" />
+        <result column="sql_rowid_private" jdbcType="BOOLEAN" property="sqlRowidPrivate" />
+        <result column="compile_namespace" jdbcType="VARCHAR" property="compileNamespace" />
+        <result column="runtime_type" jdbcType="VARCHAR" property="runtimeType" />
+        <result column="time_changed" jdbcType="INTEGER" property="timeChanged" />
+        <result column="time_created" jdbcType="INTEGER" property="timeCreated" />
+    </resultMap>
+    <select id="selectAllClassDefine" resultMap="BaseResultMap">
+      SELECT
+        cls.ID as class_name
+        ,cls.ClassType as class_type
+        ,cls.ClientDataType as clinet_data_type
+        ,cls.Super as class_super
+        ,cls.SqlRowIdPrivate as sql_rowid_private
+        ,cls.CompileNamespace as compile_namespace
+        ,property.RuntimeType as runtime_type
+        ,TO_CHAR(substring(cls.TimeChanged,1,11),'YYYY-MM-DD HH24:MI:SS') time_changed
+        ,TO_CHAR(substring(cls.TimeCreated,1,11),'YYYY-MM-DD HH24:MI:SS') time_created
+        FROM  %Dictionary.CompiledClass cls
+        LEFT JOIN  %Dictionary.CompiledProperty property
+        ON property.parent=cls.ID
+        AND property.Cardinality='parent'
+        WHERE charindex('%',cls.ID)=0  and cls.ClassType in ('persistent','serial')
+   </select>
+</mapper>

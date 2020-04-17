@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- mapper:根标签，namespace：命名空间，随便写，一般保证命名空间唯一 -->
+<mapper namespace="com.clinbrain.mapper.cache.CacheClassPropertyDefineMapper">
+    <resultMap id="BaseResultMap" type="com.clinbrain.model.cache.CacheClassPropertyDefine">
+        <result column="class_name" jdbcType="VARCHAR" property="className" />
+        <result column="property_name" jdbcType="VARCHAR" property="propertyName" />
+        <result column="property_collection" jdbcType="VARCHAR" property="propertyCollection" />
+        <result column="property_aliases" jdbcType="VARCHAR" property="propertyAliases" />
+        <result column="property_calculated" jdbcType="BOOLEAN" property="propertyCalculated" />
+        <result column="property_cardinality" jdbcType="VARCHAR" property="propertyCardinality" />
+        <result column="runtime_type" jdbcType="VARCHAR" property="runtimeType" />
+        <result column="sql_field_name" jdbcType="VARCHAR" property="sqlFieldName" />
+        <result column="sql_list_type" jdbcType="VARCHAR" property="sqlListType" />
+        <result column="sql_list_delimiter" jdbcType="VARCHAR" property="sqlListDelimiter" />
+        <result column="storable" jdbcType="BOOLEAN" property="storable" />
+        <result column="storage_name" jdbcType="VARCHAR" property="storageName" />
+        <result column="storage_delimiter" jdbcType="VARCHAR" property="storageDelimiter" />
+        <result column="storage_subscript" jdbcType="VARCHAR" property="storageSubscript" />
+        <result column="storage_piece" jdbcType="VARCHAR" property="storagePiece" />
+    </resultMap>
+    <select id="selectAllClassPropertyDefine" resultMap="BaseResultMap">
+      SELECT
+   property.parent as class_name
+  ,property.Name as property_name
+  ,property.Collection as property_collection
+  ,property.Aliases as property_aliases
+  ,property.Calculated as property_calculated
+  ,property.Cardinality as property_cardinality
+  ,property.RuntimeType as runtime_type
+  ,property.SqlFieldName as sql_field_name
+  ,property.SqlListType as sql_list_type
+  ,property.SqlListDelimiter as sql_list_delimiter
+  ,property.Storable as storable
+  ,Sub.StorageID as storage_name
+  ,Sub.Delimiter as storage_delimiter
+  ,Sub.Subscript as storage_subscript
+  ,Sub.Piece as storage_piece
+  FROM %Dictionary.CompiledProperty property
+  LEFT  JOIN (
+    SELECT
+    storage.parent ClassName
+    ,storagedata.ID StorageID
+    ,Null Delimiter
+    ,storagedata.Subscript
+    ,storagevalue.Name Piece
+    ,storagevalue.Value
+    ,storage.Type storage_type
+    FROM %Dictionary.CompiledStorage storage
+    INNER JOIN %Dictionary.CompiledStorageData storagedata
+    ON storagedata.parent= storage.ID1
+    AND storagedata.Structure='listnode'
+    INNER   JOIN %Dictionary.CompiledStorageDataValue storagevalue
+    ON storagevalue.parent= storagedata.ID
+    WHERE storage.Type IN ('%Library.CacheStorage','%Library.CacheSerialState')
+    AND charindex('%',storage.parent)=0
+    UNION ALL
+    SELECT
+    storage.parent ClassName
+    ,sqlmap.id  StorageID
+    ,sqlmapdata.Delimiter
+    ,sqlmapdata.Node Subscript
+    ,sqlmapdata.Piece
+    ,sqlmapdata.Name
+    ,storage.Type storage_type
+    FROM %Dictionary.CompiledStorage storage
+    INNER JOIN %Dictionary.CompiledStorageSQLMap sqlmap
+    ON sqlmap.parent= storage.ID1
+    AND sqlmap.Type='data'
+    LEFT  JOIN %Dictionary.CompiledStorageSQLMapData sqlmapdata
+    ON sqlmapdata.parent=sqlmap.ID
+    WHERE storage.Type='%Library.CacheSQLStorage'
+    AND charindex('%',storage.parent)=0
+    ) Sub
+    ON property.parent=Sub.ClassName
+    AND Sub.Value =CASE WHEN  Sub.storage_type='%Library.CacheSQLStorage' THEN property.SqlFieldName ELSE property.Name END
+  WHERE charindex('%',property.parent)=0
+   </select>
+</mapper>

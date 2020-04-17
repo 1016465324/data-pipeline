@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- mapper:根标签，namespace：命名空间，随便写，一般保证命名空间唯一 -->
+<mapper namespace="com.clinbrain.mapper.cache.CacheDataTableMapper">
+    <resultMap id="BaseResultMap" type="com.clinbrain.model.cache.CacheDataTable">
+        <result column="schema_name" jdbcType="VARCHAR" property="schemaName" />
+        <result column="table_name" jdbcType="VARCHAR" property="tableName" />
+        <result column="class_name" jdbcType="VARCHAR" property="className" />
+        <result column="description" jdbcType="VARCHAR" property="description" />
+    </resultMap>
+    <select id="selectAllDataTable" parameterType="java.lang.String" resultMap="BaseResultMap">
+      SELECT
+   tbl.TABLE_SCHEMA as schema_name
+  ,tbl.TABLE_NAME as table_name
+  ,tbl.CLASSNAME as class_name
+  ,tbl.DESCRIPTION as description
+   FROM  INFORMATION_SCHEMA.TABLES tbl
+   WHERE tbl.TABLE_SCHEMA = #{schemaName,jdbcType=VARCHAR}
+   AND tbl.TABLE_TYPE = 'BASE TABLE'
+   </select>
+</mapper>
