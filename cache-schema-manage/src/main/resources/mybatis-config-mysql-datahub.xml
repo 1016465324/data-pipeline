@@ -50,7 +50,7 @@
         <mapper resource="mappers/mysql/DataTableMapper.xml"/>
         <mapper resource="mappers/mysql/StorageSubscriptDefineMapper.xml"/>
         <mapper resource="mappers/mysql/TableMetaMapper.xml"/>
-<!--        <mapper resource="mappers/mysql/RestoreDataLogs.xml"/>-->
-<!--        <mapper resource="mappers/mysql/RestoreDataLogDetails.xml"/>-->
+        <mapper resource="mappers/mysql/ParseLogsMapper.xml"/>
+        <mapper resource="mappers/mysql/ParseLogDetailsMapper.xml"/>
     </mappers>
 </configuration>

@@ -3,22 +3,29 @@ package com.clinbrain;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.clinbrain.mapper.ParseLogDetailsMapper;
+import com.clinbrain.mapper.ParseLogsMapper;
 import com.clinbrain.model.*;
 import com.clinbrain.rsultMessage.DataType;
 import com.clinbrain.rsultMessage.Message;
 import com.clinbrain.rsultMessage.MessageBuilder;
-import com.clinbrain.sink.KafkaSink;
+import com.clinbrain.util.ErrorInfo;
 import com.clinbrain.util.PopLoadUtils;
 import com.intersys.cache.Dataholder;
 import com.intersys.objects.CacheDatabase;
 import com.intersys.objects.CacheException;
 import com.intersys.objects.Database;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.ibatis.io.Resources;
+import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.apache.ibatis.session.SqlSessionFactoryBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.Tuple2;
 import scala.Tuple4;
 
+import java.io.InputStream;
 import java.sql.ResultSet;
 import java.util.*;
 
@@ -34,22 +41,30 @@ public class ParseCacheLogs {
     private static final Logger logger = LoggerFactory.getLogger(ParseCacheLogs.class);
 
     private static Properties pop;
-    private static KafkaSink kafkaSink;
+//    private static KafkaSink kafkaSink;
     private static Map<String, GlobalManager> allGlobalManager;
     private static Map<String, String> namespaceMap;
     private static Map<String, Database> cacheQueryConnMap = new HashMap<>();
     private static Map<String, String> localCacheDataMap = new HashMap<>(); //本地缓存日志
+    private static Map<String, String> offsetMap = new HashMap<>(); //下标偏移量记录
+    private static ParseLogsMapper parseLogsMapper;
+    private static ParseLogDetailsMapper parseLogDetailsMapper;
 
     static{
         try{
             pop = PopLoadUtils.loadProperties(null);
-            kafkaSink = new KafkaSink(); //加载kafka对象
+//            kafkaSink = new KafkaSink(); //加载kafka对象
             allGlobalManager = GlobalManager.buildGlobalManager();
-            namespaceMap = GlobalManager.buildGlobalDbMapNamespace(pop.getProperty("cache.glob.url"),
-                    pop.getProperty("cache.glob.username"), pop.getProperty("cache.glob.password"));
+            namespaceMap = GlobalManager.buildGlobalDbMapNamespace(pop.getProperty("cache.glob.url"), pop.getProperty("cache.glob.username"),
+                    pop.getProperty("cache.glob.password"));
+            InputStream resourceAsStream = Resources.getResourceAsStream("mybatis-config-mysql-datahub.xml");
+            SqlSessionFactory build = new SqlSessionFactoryBuilder().build(resourceAsStream);
+            SqlSession sqlSession = build.openSession();
+            parseLogsMapper = sqlSession.getMapper(ParseLogsMapper.class);
+            parseLogDetailsMapper = sqlSession.getMapper(ParseLogDetailsMapper.class);
         }catch (Exception e){
             logger.error("实时还原,加载元数据发生错误: {}.", e.getMessage());
-            e.printStackTrace();
+            //e.printStackTrace();
             throw new RuntimeException(String.format("实时还原,加载元数据发生错误: %s", e.getMessage()));
         }
     }
@@ -71,23 +86,32 @@ public class ParseCacheLogs {
 
         List<String> resMessages = new ArrayList<>(); //返回消息体
         long Tstart = System.currentTimeMillis();
-        int i = 0;
+        String offset_key = ""; //namespace + dbname
+        String offset_value; //处理日期 + 批处理当前下标
+        int batch_index = 0;
         while (rs.next()) {
-            System.out.println(i++);
+            System.out.println(batch_index);
+            offset_value = String.format("%s_%s", pop.getProperty("cache.logs.dealWithTime"), batch_index);
+            batch_index++;
             JSONObject parse = null;
             try{
                 //1.获取得到对应数据部分、global名称
                 parse = JSON.parseObject(rs.getString(2));
                 if(parse == null){
-                    throw new RuntimeException("当前数据解析JSON失败!");
+//                    saveErrInfo(new ParseLogs(offset_value, 2),
+//                            new ParseLogDetails(String.format("当前数据解析JSON失败: %s", rs.getString(2))));
+                    throw new RuntimeException(ErrorInfo.getErrDesc(ErrorInfo.PARSE_JSON_ERROR));
                 }
                 logger.info("正在处理数据: {}.", parse.toJSONString());
 
                 //2.获取配置项
                 String dbName = parse.getString("DBName");
-                GlobalManager globManager = allGlobalManager.get(dbName); //根据dbName获取相应配置加载类
+                String nameSpace = namespaceMap.get(String.format("%s_%s", parse.getString("Glob"), dbName)); //得到namespace
+                GlobalManager globManager = allGlobalManager.get(nameSpace); //根据dbName获取相应配置加载类
                 if(globManager == null){
-                    throw new RuntimeException(String.format("未获取到加载类!"));
+//                    saveErrInfo(new ParseLogs(offset_value, 2),
+//                            new ParseLogDetails(String.format("未获取到加载类: %s", rs.getString(2))));
+                    throw new RuntimeException(ErrorInfo.getErrDesc(ErrorInfo.GLOBMANAGER_NOTFOUND));
                 }
                 Map<String, Set<String>> allGlobalNodeOfClass = globManager.getAllGlobalNodeOfClass();
                 Map<String, List<Tuple2<List<StorageSubscriptDefine>, List<ClassPropertyDefine>>>> allGlobalNodeStorage = globManager.getAllGlobalNodeStorage();
@@ -117,13 +141,15 @@ public class ParseCacheLogs {
                 for (Tuple2<List<StorageSubscriptDefine>, List<ClassPropertyDefine>> tuple2 : tuple2s) { //定位当前global对应property
                     if (compareGlobalNodeInfo(logExpressArr, tuple2._1)) { //global匹配上了
                         String globName = parse.getString("Glob");
-                        String nameSpace = namespaceMap.get(String.format("%s_%s", globName, dbName)); //得到namespace
+                        offset_key = String.format("%s_%s", nameSpace, dbName);
                         String globalAlias = getGlobalAlias(globName, tuple2._1); //组装全称
                         List<ClassPropertyDefine> classPropDef = tuple2._2;
                         String className = classPropDef.get(0).getClassName(); //得到当前global对应类
                         Tuple4<ClassDefine, List<ClassStorageDefine>, List<ClassPropertyDefine>, DataTable> classDefTabTuple4 = allClassInfo.get(className);
                         if(classDefTabTuple4 == null){ //未匹配到类下属性，不作处理
                             logger.warn("当前global:{}对应class:{}未匹配到属性信息，不作处理", parse.getString("Glob"), className);
+                            saveErrInfo(new ParseLogs(offset_value, 1), new ParseLogDetails(
+                                    String.format("当前global: %s对应class: %s未匹配到属性信息，不作处理", parse.getString("Glob"), className)));
                             continue;
                         }
 
@@ -133,7 +159,9 @@ public class ParseCacheLogs {
                         Map<String, String> globMap = buildGlobal(logExpressArr, tuple2._1, allGlobDefs); //替换变量为真实值
                         DataTable dataTable = classDefTabTuple4._4(); //得到数据表信息
                         if(dataTable == null){
-                            logger.warn("当前global:{}未匹配到datatable信息，不作处理", parse.getString("Glob"));
+                            logger.warn("当前global:{}未匹配到datatable信息,不作处理", parse.getString("Glob"));
+                            saveErrInfo(new ParseLogs(offset_value, 1), new ParseLogDetails(
+                                    String.format("当前global: %s未匹配到datatable信息,不作处理", parse.getString("Glob"))));
                             continue;
                         }
 
@@ -144,20 +172,22 @@ public class ParseCacheLogs {
                         if (allGlobDefs.size() > 1) { //多个global批处理
                             message = buildMsgByMultpGlob(globMap, parse, idsMap, globManager, paramArr);
                             resMessages.add(message);
-                            kafkaSink.sendMessage(pop.getProperty("cache.topic"), 1, message, dbName); //发送kafka
+                            //kafkaSink.sendMessage(pop.getProperty("cache.topic"), 1, message, dbName); //发送kafka
                         } else { //单个global赋值此条数据
                             message = buildMsgBySiglrGlob(allGlobDefs.get(0), parse, idsMap, globManager, paramArr);
                             resMessages.add(message);
-                            kafkaSink.sendMessage(pop.getProperty("cache.topic"), 1, message, dbName); //发送kafka
+                            //kafkaSink.sendMessage(pop.getProperty("cache.topic"), 1, message, dbName); //发送kafka
                         }
                     }
                 }
-            }catch (Exception e){//TODO 错误记录存入数据库？
-                logger.error("处理当前数据: {}.出错 :{}.", rs.getString(2), e.getMessage());
-                e.printStackTrace();
-                //throw new RuntimeException(e);
+            }catch (Exception e){
+                logger.error("{} {}.", e.getMessage(), rs.getString(2));
+                saveErrInfo(new ParseLogs(offset_value, 2), new ParseLogDetails(
+                        String.format("当前数据还原过程出错: %s : %s", rs.getString(2), e.getMessage())));
+                //e.printStackTrace();
                 continue;
             }
+            offsetMap.put(offset_key, offset_value); //批处理下标记录
         }
         System.out.println(String.format(String.format("处理时长总计: %s", System.currentTimeMillis() - Tstart)));
         return resMessages;
@@ -256,7 +286,7 @@ public class ParseCacheLogs {
             beforeBuilder.appendSchema(id.getKey(), DataType.VARCHAR, false, false);
             beforeRowDataValues.add(id.getValue());
         }
-        
+
         afterBuilder.appendPayload(afterRowDataValues.toArray());
         beforeBuilder.appendPayload(beforeRowDataValues.toArray());
 
@@ -555,7 +585,7 @@ public class ParseCacheLogs {
         JSONObject beforeObj = JSONObject.parseObject(beforeMsg.toString());
 
         resObj.put("protocol", afterObj.get("protocol"));
-        resObj.put("shema", afterObj.get("schema"));
+        resObj.put("schema", afterObj.get("schema"));
 
         JSONObject PlayObj = new JSONObject();
         PlayObj.put("after", afterObj.getJSONArray("payload").getJSONObject(0).get("tuple"));
@@ -578,7 +608,7 @@ public class ParseCacheLogs {
         JSONObject afterResObj = JSONObject.parseObject(afterMsg.toString());
         JSONObject beforeResObj = JSONObject.parseObject(beforeMsg.toString());
 
-        resObj.put("table", afterResObj.getJSONObject("shema").getString("namespace"));
+        resObj.put("table", afterResObj.getJSONObject("schema").getString("namespace"));
         resObj.put("op_type", op_type);
         resObj.put("op_ts", op_ts);
         resObj.put("current_ts", System.currentTimeMillis());
@@ -676,6 +706,28 @@ public class ParseCacheLogs {
             }
         }
         return idMap;
+    }
+
+
+    /**
+     * 下标记录
+     */
+    public void saveOffset(){
+        System.out.println("钩子函数执行啦!!!!!!");
+    }
+
+
+    /**
+     * 记录异常数据处理信息
+     * @param parseLogs
+     * @param logDetails
+     */
+    public static void saveErrInfo(ParseLogs parseLogs, ParseLogDetails logDetails) {
+        String log_id = UUID.randomUUID().toString();
+        parseLogs.setLogId(log_id);
+        logDetails.setLogsId(log_id);
+        parseLogsMapper.insertSelective(parseLogs);
+        parseLogDetailsMapper.insertSelective(logDetails);
     }
 
 
