@@ -60,7 +60,7 @@
 <!--               enableSelectByExample="false" selectByExampleQueryId="false"></table>-->
         <table schema="datahub" tableName="restore_data_logs" domainObjectName="ParseLogs" enableCountByExample="false" enableUpdateByExample="false" enableDeleteByExample="false"
                enableSelectByExample="false" selectByExampleQueryId="false"></table>
-        <table schema="datahub" tableName="restore_data_logdetails" domainObjectName="ParseLogDetails" enableCountByExample="false" enableUpdateByExample="false" enableDeleteByExample="false"
-               enableSelectByExample="false" selectByExampleQueryId="false"></table>
+<!--        <table schema="datahub" tableName="restore_data_logdetails" domainObjectName="ParseLogDetails" enableCountByExample="false" enableUpdateByExample="false" enableDeleteByExample="false"-->
+<!--               enableSelectByExample="false" selectByExampleQueryId="false"></table>-->
     </context>
 </generatorConfiguration>

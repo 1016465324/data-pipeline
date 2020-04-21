@@ -1,5 +1,6 @@
 package com.clinbrain;
 
+import com.alibaba.fastjson.JSON;
 import com.clinbrain.util.CacheClient;
 import com.clinbrain.util.Constans;
 import com.clinbrain.util.PopLoadUtils;
@@ -44,31 +45,33 @@ public class Startup {
      */
     public static void main(String[] args) {
         Startup startup = new Startup();
-        startup.addShutdownHook(); //钩子函数
-        startup.StartParse(pop.getProperty("cache.logs.namespace"));
+        startup.StartParse(startup, pop.getProperty("cache.logs.namespace"));
     }
 
 
     /**
      * 启动接口
      */
-    private void StartParse(String dbName){
+    private void StartParse(Startup startup, String dbName){
+        String errMsg = "";
         try {
             //1.查取数据
             ResultSet rs = getResultLogs(dbName);
             //2.解析开始
             List<String> messages = parseCacheLogs.startDealWithLogs(rs);
             //打印成表结构
-//            printToTable(messages);
-            System.out.println(messages.toString());
+            //printToTable(messages);
+            System.out.println(JSON.parseObject(messages.get(0)).toJSONString());
         }catch (Exception e){
-            logger.error(String.format("实时数据还原过程出错: %s", e.getMessage()));
-            e.printStackTrace();
+            errMsg = e.getMessage();
+            logger.error("实时数据还原过程出错: {}.", e.getMessage());
+            //throw new RuntimeException(String.format("实时数据还原过程出错: %s", e.getMessage()));
         }finally {
+            startup.addShutdownHook(errMsg); //钩子函数
             try {
                 cacheStat.close();
             } catch (SQLException e) {
-                logger.error(String.format("关闭cache数据库连接错误: %s", e.getMessage()));
+                logger.error("关闭cache数据库连接错误: {}.", e.getMessage());
             }
         }
     }
@@ -77,12 +80,12 @@ public class Startup {
     /**
      * 收尾存入下标
      */
-    private void addShutdownHook(){
+    private void addShutdownHook(String errMsg){
        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
            @Override
            public void run() {
                if(parseCacheLogs != null){
-                   parseCacheLogs.saveOffset();
+                   parseCacheLogs.saveOffsetInfo(errMsg);
                }else {
                    System.out.println("Startup配置加载出错啦!!");
                }

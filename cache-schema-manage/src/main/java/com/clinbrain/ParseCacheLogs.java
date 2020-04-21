@@ -41,25 +41,26 @@ public class ParseCacheLogs {
     private static final Logger logger = LoggerFactory.getLogger(ParseCacheLogs.class);
 
     private static Properties pop;
-//    private static KafkaSink kafkaSink;
+    //private static KafkaSink kafkaSink;
     private static Map<String, GlobalManager> allGlobalManager;
     private static Map<String, String> namespaceMap;
     private static Map<String, Database> cacheQueryConnMap = new HashMap<>();
     private static Map<String, String> localCacheDataMap = new HashMap<>(); //本地缓存日志
     private static Map<String, String> offsetMap = new HashMap<>(); //下标偏移量记录
+    private static SqlSession sqlSession;
     private static ParseLogsMapper parseLogsMapper;
     private static ParseLogDetailsMapper parseLogDetailsMapper;
 
     static{
         try{
             pop = PopLoadUtils.loadProperties(null);
-//            kafkaSink = new KafkaSink(); //加载kafka对象
+            //kafkaSink = new KafkaSink(); //加载kafka对象
             allGlobalManager = GlobalManager.buildGlobalManager();
             namespaceMap = GlobalManager.buildGlobalDbMapNamespace(pop.getProperty("cache.glob.url"), pop.getProperty("cache.glob.username"),
                     pop.getProperty("cache.glob.password"));
             InputStream resourceAsStream = Resources.getResourceAsStream("mybatis-config-mysql-datahub.xml");
             SqlSessionFactory build = new SqlSessionFactoryBuilder().build(resourceAsStream);
-            SqlSession sqlSession = build.openSession();
+            sqlSession = build.openSession();
             parseLogsMapper = sqlSession.getMapper(ParseLogsMapper.class);
             parseLogDetailsMapper = sqlSession.getMapper(ParseLogDetailsMapper.class);
         }catch (Exception e){
@@ -107,6 +108,7 @@ public class ParseCacheLogs {
                 //2.获取配置项
                 String dbName = parse.getString("DBName");
                 String nameSpace = namespaceMap.get(String.format("%s_%s", parse.getString("Glob"), dbName)); //得到namespace
+                offset_key = String.format("%s_%s", nameSpace, dbName);
                 GlobalManager globManager = allGlobalManager.get(nameSpace); //根据dbName获取相应配置加载类
                 if(globManager == null){
 //                    saveErrInfo(new ParseLogs(offset_value, 2),
@@ -141,14 +143,13 @@ public class ParseCacheLogs {
                 for (Tuple2<List<StorageSubscriptDefine>, List<ClassPropertyDefine>> tuple2 : tuple2s) { //定位当前global对应property
                     if (compareGlobalNodeInfo(logExpressArr, tuple2._1)) { //global匹配上了
                         String globName = parse.getString("Glob");
-                        offset_key = String.format("%s_%s", nameSpace, dbName);
                         String globalAlias = getGlobalAlias(globName, tuple2._1); //组装全称
                         List<ClassPropertyDefine> classPropDef = tuple2._2;
                         String className = classPropDef.get(0).getClassName(); //得到当前global对应类
                         Tuple4<ClassDefine, List<ClassStorageDefine>, List<ClassPropertyDefine>, DataTable> classDefTabTuple4 = allClassInfo.get(className);
                         if(classDefTabTuple4 == null){ //未匹配到类下属性，不作处理
                             logger.warn("当前global:{}对应class:{}未匹配到属性信息，不作处理", parse.getString("Glob"), className);
-                            saveErrInfo(new ParseLogs(offset_value, 1), new ParseLogDetails(
+                            saveErrInfo(new ParseLogs(offset_key, offset_value, 1), new ParseLogDetails(
                                     String.format("当前global: %s对应class: %s未匹配到属性信息，不作处理", parse.getString("Glob"), className)));
                             continue;
                         }
@@ -160,7 +161,7 @@ public class ParseCacheLogs {
                         DataTable dataTable = classDefTabTuple4._4(); //得到数据表信息
                         if(dataTable == null){
                             logger.warn("当前global:{}未匹配到datatable信息,不作处理", parse.getString("Glob"));
-                            saveErrInfo(new ParseLogs(offset_value, 1), new ParseLogDetails(
+                            saveErrInfo(new ParseLogs(offset_key, offset_value, 1), new ParseLogDetails(
                                     String.format("当前global: %s未匹配到datatable信息,不作处理", parse.getString("Glob"))));
                             continue;
                         }
@@ -181,11 +182,12 @@ public class ParseCacheLogs {
                     }
                 }
             }catch (Exception e){
-                logger.error("{} {}.", e.getMessage(), rs.getString(2));
-                saveErrInfo(new ParseLogs(offset_value, 2), new ParseLogDetails(
-                        String.format("当前数据还原过程出错: %s : %s", rs.getString(2), e.getMessage())));
-                //e.printStackTrace();
-                continue;
+                logger.error("{}: {}.", e.getMessage(), rs.getString(2));
+//                saveErrInfo(new ParseLogs(offset_key, offset_value, 2), new ParseLogDetails(
+//                        String.format("当前数据还原过程出错: %s : %s", rs.getString(2), e.getMessage())));
+//                continue;
+                offsetMap.put(offset_key, offset_value); //批处理下标记录
+                throw new RuntimeException(String.format("%s: %s", e.getMessage(), rs.getString(2)));
             }
             offsetMap.put(offset_key, offset_value); //批处理下标记录
         }
@@ -201,7 +203,7 @@ public class ParseCacheLogs {
      * @return
      */
     private static String buildMsgByMultpGlob(Map<String, String> globMap, JSONObject parse, Map<String, String> idsMap,
-                                              GlobalManager globManager, String[] paramArr){
+                                              GlobalManager globManager, String[] paramArr) throws Exception{
         /**
          * 类定义参数
          */
@@ -261,7 +263,7 @@ public class ParseCacheLogs {
                 }
             }
 
-            List<JSONObject> QueryJsonObjList = queryLog(nameSpace, className, queryGlobs);
+            List<JSONObject> QueryJsonObjList = getLogsByQuery(nameSpace, className, queryGlobs);
 
             if(QueryJsonObjList.size() > 0){ //后处理经查询的数据
                 for (JSONObject jsonObject : QueryJsonObjList) {
@@ -300,7 +302,8 @@ public class ParseCacheLogs {
      * @param parse
      * @return
      */
-    private static String buildMsgBySiglrGlob(String global, JSONObject parse, Map<String, String> idsMap, GlobalManager globManager, String[] paramArr) {
+    private static String buildMsgBySiglrGlob(String global, JSONObject parse, Map<String, String> idsMap, GlobalManager globManager,
+                                              String[] paramArr) throws Exception{
 
         /**
          * 类定义参数
@@ -354,7 +357,7 @@ public class ParseCacheLogs {
      * @param globalDef
      */
     private static void buildMSG(String globalDef, JSONArray after, JSONArray before, List<Object> afterRowDataValues, List<Object> beforeRowDataValues,
-                                 MessageBuilder afterBuilder, MessageBuilder beforeBuilder, String tableName, GlobalManager globManager) {
+                                 MessageBuilder afterBuilder, MessageBuilder beforeBuilder, String tableName, GlobalManager globManager) throws Exception{
 
         //当前global对应属性
         List<ClassPropertyDefine> fields = globManager.getAllGlobalNodeProperty().get(globalDef);
@@ -391,7 +394,7 @@ public class ParseCacheLogs {
      * @param builder
      */
     private static void buidMsgNotEmpty(ClassPropertyDefine classPropDef, JSONArray valueArr, String tableName,
-                                        List<Object> rowDataValues, MessageBuilder builder, GlobalManager globManager){
+                                        List<Object> rowDataValues, MessageBuilder builder, GlobalManager globManager) throws Exception{
 
         int storePiece = Integer.parseInt(classPropDef.getStoragePiece()) - 1; //属性下标, 按属性下标-1取数据值
         String colName = classPropDef.getSqlFieldName(); //columnName
@@ -458,7 +461,8 @@ public class ParseCacheLogs {
      * @param rowDataValues
      * @param builder
      */
-    private static void buidMsgEmpty(ClassPropertyDefine classPropDef, String tableName, List<Object> rowDataValues, MessageBuilder builder, GlobalManager globManager){
+    private static void buidMsgEmpty(ClassPropertyDefine classPropDef, String tableName, List<Object> rowDataValues, MessageBuilder builder,
+                                     GlobalManager globManager) throws Exception{
         String colName = classPropDef.getSqlFieldName(); //columnName
         String colType = "varchar"; //columnType
         String table_field = tableName + "_" + colName; //findTypeKey
@@ -500,7 +504,8 @@ public class ParseCacheLogs {
      * @param allGlobalDefs
      * @return
      */
-    private static Map<String, String> buildGlobal(String[] logExpressions, List<StorageSubscriptDefine> subscriptDef, List<String> allGlobalDefs) {
+    private static Map<String, String> buildGlobal(String[] logExpressions, List<StorageSubscriptDefine> subscriptDef,
+                                                   List<String> allGlobalDefs) throws Exception {
 
         Map<String, String> globMap = new HashMap<>();
         StringBuilder sb = new StringBuilder();
@@ -533,7 +538,7 @@ public class ParseCacheLogs {
      * @return
      * @throws Exception
      */
-    private static List<JSONObject> queryLog(String namespace, String className, List<String> globals) throws CacheException {
+    private static List<JSONObject> getLogsByQuery(String namespace, String className, List<String> globals) throws CacheException {
 
         Database database = null;
         if(cacheQueryConnMap.containsKey(namespace)) { //已存入直接取
@@ -579,7 +584,7 @@ public class ParseCacheLogs {
      * @param beforeMsg
      * @return
      */
-    private static String parseMsg(Message afterMsg, Message beforeMsg) {
+    private static String parseMsg(Message afterMsg, Message beforeMsg) throws Exception{
         JSONObject resObj = new JSONObject();
         JSONObject afterObj = JSONObject.parseObject(afterMsg.toString());
         JSONObject beforeObj = JSONObject.parseObject(beforeMsg.toString());
@@ -603,7 +608,8 @@ public class ParseCacheLogs {
      * @param beforeMsg
      * @return
      */
-    private static String parseOggMsg(Message afterMsg, Message beforeMsg,String op_type, String pos, String op_ts, String primary_keys) {
+    private static String parseOggMsg(Message afterMsg, Message beforeMsg,String op_type, String pos, String op_ts,
+                                      String primary_keys) throws Exception{
         JSONObject resObj = new JSONObject();
         JSONObject afterResObj = JSONObject.parseObject(afterMsg.toString());
         JSONObject beforeResObj = JSONObject.parseObject(beforeMsg.toString());
@@ -658,7 +664,7 @@ public class ParseCacheLogs {
      * @return
      */
     private static Map<String, String> buildRowId(String[] logExpressArr, List<StorageSubscriptDefine> storageSubscriptDefines,
-                                                  Tuple4<ClassDefine, List<ClassStorageDefine>, List<ClassPropertyDefine>, DataTable> classDefTabTuple4) {
+                                                  Tuple4<ClassDefine, List<ClassStorageDefine>, List<ClassPropertyDefine>, DataTable> classDefTabTuple4) throws Exception{
 
         ClassStorageDefine classStogeDef = classDefTabTuple4._2().get(0);
         List<ClassPropertyDefine> classPopDef = classDefTabTuple4._3();
@@ -710,9 +716,28 @@ public class ParseCacheLogs {
 
 
     /**
-     * 下标记录
+     * 启用钩子函数_下标记录
      */
-    public void saveOffset(){
+    public void saveOffsetInfo(String errMsg) {
+        for (Map.Entry<String, String> offset : offsetMap.entrySet()) {
+            String logId = UUID.randomUUID().toString();
+            ParseLogs parseLogs = new ParseLogs();
+            parseLogs.setLogId(logId);
+            parseLogs.setOffsetNamespace(offset.getKey());
+            parseLogs.setOffsetIndex(offset.getValue());
+            parseLogs.setCreateTime(new Date());
+            if(StringUtils.isEmpty(errMsg)) {
+                parseLogs.setIdentification(1);
+            }else {
+                parseLogs.setIdentification(2);
+                ParseLogDetails logDetails = new ParseLogDetails(errMsg);
+                logDetails.setLogsId(logId);
+                logDetails.setCreateTime(new Date());
+                parseLogDetailsMapper.insertSelective(logDetails);
+            }
+            parseLogsMapper.insertSelective(parseLogs);
+            sqlSession.commit();
+        }
         System.out.println("钩子函数执行啦!!!!!!");
     }
 
@@ -722,12 +747,15 @@ public class ParseCacheLogs {
      * @param parseLogs
      * @param logDetails
      */
-    public static void saveErrInfo(ParseLogs parseLogs, ParseLogDetails logDetails) {
+    public static void saveErrInfo(ParseLogs parseLogs, ParseLogDetails logDetails) throws Exception{
         String log_id = UUID.randomUUID().toString();
         parseLogs.setLogId(log_id);
+        parseLogs.setCreateTime(new Date());
         logDetails.setLogsId(log_id);
+        logDetails.setCreateTime(new Date());
         parseLogsMapper.insertSelective(parseLogs);
         parseLogDetailsMapper.insertSelective(logDetails);
+        sqlSession.commit();
     }
 
 
@@ -735,7 +763,7 @@ public class ParseCacheLogs {
      * 格式化globalName
      * @return
      */
-    private static Object[] getGlobalDefInfos(JSONObject parse) {
+    private static Object[] getGlobalDefInfos(JSONObject parse) throws Exception{
 
         String globName = String.format("^%s", parse.getString("Glob")); //globalName
         String globRefNode = String.format("^%s", parse.getString("GlobalReference")); //提取global节点信息
@@ -763,6 +791,7 @@ public class ParseCacheLogs {
                 sb.append(subscriptDefine.getExpression()).append(",");
         }
 
+        //throw new NullPointerException("空指针啦。。。。");
         return  sb.toString().substring(0, sb.toString().lastIndexOf(",")) + ")";
     }
 
