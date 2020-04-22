@@ -7,6 +7,7 @@ import com.clinbrain.model.cache.CacheStorageRowidSubscript;
 import com.clinbrain.model.cache.CacheStorageSubSubscript;
 import com.clinbrain.util.UtilHelper;
 import com.google.common.base.Strings;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.ibatis.io.Resources;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -45,8 +46,37 @@ public class SchemaInfoSync {
     private Map<String, SqlSession> cacheSessions;
     private SqlSession currentCacheSession;
 
+    private Map<String, Map<String, Set<String>>> allConfigTableInfo;
+
     public SchemaInfoSync(String path) {
         this.props = UtilHelper.loadProperties(null);
+
+        allConfigTableInfo = new HashMap<>();
+        String tableStr = props.getProperty("tables");
+        String[] tableInfos = tableStr.split(",");
+        for (String tableInfo : tableInfos) {
+            String[] fields = tableInfo.split(":");
+            String namespace = fields[0];
+            String schemaName = fields[1];
+            String tableName = fields[2];
+            Map<String, Set<String>> configTableInfos = allConfigTableInfo.get(namespace);
+            if (null == configTableInfos) {
+                configTableInfos = new HashMap<>();
+                Set<String> tableNames = new HashSet<>();
+                tableNames.add(tableName);
+                configTableInfos.put(schemaName, tableNames);
+                allConfigTableInfo.put(namespace, configTableInfos);
+            } else {
+                Set<String> tableNames = configTableInfos.get(schemaName);
+                if (null == tableNames) {
+                    tableNames = new HashSet<>();
+                    tableNames.add(tableName);
+                    configTableInfos.put(schemaName, tableNames);
+                } else {
+                    tableNames.add(tableName);
+                }
+            }
+        }
 
         initMysql();
         initCache();
@@ -139,22 +169,70 @@ public class SchemaInfoSync {
                     mysqlSession.commit();
                 }
 
-                logger.info("begin to sync data schema.");
-                List<DataSchema> allDataSchema = getAllDataSchema(dataSource);
-                allDataSchema.forEach(o -> dataSchemaMapper.insert(o));
-                mysqlSession.commit();
+                Map<String, Set<String>> configTableInfos = allConfigTableInfo.get(namespace);
+                if (null != configTableInfos) {
+                    logger.info("begin to sync data schema.");
+                    List<DataSchema> allDataSchema = getAllDataSchema(dataSource);
+                    List<DataSchema> allConfigDataSchema = allDataSchema.stream()
+                            .filter(o -> configTableInfos.containsKey(o.getSchemaName())).collect(Collectors.toList());
 
-                for (DataSchema dataSchema : allDataSchema) {
-                    logger.info("begin to sync data table with {}.{}", namespace, dataSchema.getSchemaName());
-                    List<DataTable> allDataTableBySchema = getAllDataTableBySchema(dataSource,
-                            dataSchema.getSchemaName(), allClassDefineOfDsId);
-                    allDataTableBySchema.forEach(o -> dataTableMapper.insert(o));
+                    allConfigDataSchema.forEach(o -> dataSchemaMapper.insert(o));
                     mysqlSession.commit();
 
-                    logger.info("begin to sync table meta with {}.", dataSchema.getSchemaName());
-                    List<TableMeta> allTableMetaBySchema = getAllTableMetaBySchema(dataSource, dataSchema.getSchemaName());
-                    allTableMetaBySchema.forEach(o -> tableMetaMapper.insert(o));
-                    mysqlSession.commit();
+                    for (DataSchema dataSchema : allConfigDataSchema) {
+                        Set<String> tableNames = configTableInfos.get(dataSchema.getSchemaName());
+                        logger.info("begin to sync data table with {}.{}", namespace, dataSchema.getSchemaName());
+                        List<DataTable> allDataTableBySchema = getAllDataTableBySchema(dataSource,
+                                dataSchema.getSchemaName(), allClassDefineOfDsId);
+                        List<DataTable> allConfigDataTable = allDataTableBySchema.stream()
+                                .filter(o -> tableNames.contains(o.getTableName())).collect(Collectors.toList());
+                        allConfigDataTable.forEach(o -> dataTableMapper.insert(o));
+                        mysqlSession.commit();
+
+                        logger.info("begin to sync table meta with {}.", dataSchema.getSchemaName());
+                        List<TableMeta> allTableMetaBySchema = getAllTableMetaBySchema(dataSource, dataSchema.getSchemaName());
+                        Map<String, List<TableMeta>> allConfigTableMeta = allTableMetaBySchema.stream()
+                                .filter(o -> tableNames.contains(o.getTableName()))
+                                .collect(Collectors.groupingBy(TableMeta::getTableName));
+                        for (DataTable dataTable : allConfigDataTable) {
+                            ClassDefine classDefine = allClassDefineOfDsId.get(dataTable.getClassName());
+                            List<ClassStorageDefine> classStorageDefines = allClassStorageDefine.get(dataTable.getClassName());
+                            if (StringUtils.equalsIgnoreCase(classDefine.getSqlRowidPrivate(), "Y")) {
+                                TableMeta tableMeta = new TableMeta();
+                                tableMeta.setVerId(1);
+                                tableMeta.setDsId(dataSource.getId());
+                                tableMeta.setTableName(dataTable.getTableName());
+                                tableMeta.setColumnName(classStorageDefines.get(0).getSqlRowidName());
+                                tableMeta.setOriginalColumnName(tableMeta.getColumnName());
+                                tableMeta.setColumnId(0);
+                                tableMeta.setInternalColumnId(0);
+                                tableMeta.setHiddenColumn("Y");
+                                tableMeta.setVirtualColumn("N");
+                                tableMeta.setOriginalSer(0);
+                                tableMeta.setDataType("integer");
+
+                                tableMeta.setDataLength((long) Integer.MAX_VALUE);
+                                tableMeta.setDataPrecision(null);
+                                tableMeta.setDataScale(null);
+                                tableMeta.setCharLength(null);
+                                tableMeta.setCharUsed(null);
+                                tableMeta.setNullable("N");
+                                tableMeta.setIsPk("N");
+                                tableMeta.setPkPosition(null);
+                                Date date = new Date();
+                                tableMeta.setAlterTime(date);
+                                tableMeta.setCreateTime(date);
+                                tableMeta.setComments("");
+                                tableMeta.setDefaultValue("");
+                                allConfigTableMeta.get(dataTable.getTableName()).add(0, tableMeta);
+                            }
+                        }
+
+                        for (Map.Entry<String, List<TableMeta>> entry : allConfigTableMeta.entrySet()) {
+                            entry.getValue().forEach(o -> tableMetaMapper.insert(o));
+                            mysqlSession.commit();
+                        }
+                    }
                 }
 
                 currentCacheSession.close();
@@ -457,7 +535,6 @@ public class SchemaInfoSync {
         return cacheClassPropertyDefineMapper.selectAllClassPropertyDefine().stream().map(cacheClassPropertyDefine -> {
             ClassPropertyDefine classPropertyDefine = new ClassPropertyDefine();
 
-            System.out.println(cacheClassPropertyDefine.getClassName());
             ClassDefine classDefine = allClassDefineOfDsId.get(cacheClassPropertyDefine.getClassName());
             classPropertyDefine.setDsId(dataSource.getId());
             classPropertyDefine.setClassId(null == classDefine ? null : classDefine.getId());

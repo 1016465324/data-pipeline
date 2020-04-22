@@ -14,6 +14,7 @@ import org.junit.Test;
 
 import java.io.InputStream;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @ClassName SchemaInfoSyncTest
@@ -56,9 +57,18 @@ public class SchemaInfoSyncTest {
         schemaInfoSync.schemaInfoSync();
     }
 
-//    @Test
-//    public void generateRuleTest() {
-//        GlobalManager globalManager = new GlobalManager();
-//        globalManager.generateRule();
-//    }
+    @Test
+    public void globalManagerTest() {
+        GlobalManager.buildGlobalManager();
+    }
+
+    @Test
+    public void generateRuleTest() throws Exception {
+        String url="jdbc:Cache://192.168.0.242:1972/%SYS";
+        String username="_SYSTEM";
+        String password="sys";
+
+        Map<String, List<String>> globalDBMapNamespace = GlobalManager.buildGlobalDbMapNamespace(url, username, password);
+        System.out.println(globalDBMapNamespace.size());
+    }
 }

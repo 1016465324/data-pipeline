@@ -37,12 +37,35 @@ public class GlobalManager {
 
     private DataSource dataSource;
 
+    private static DataSourceMapper dataSourceMapper;
     private static ClassDefineMapper classDefineMapper;
     private static ClassPropertyDefineMapper classPropertyDefineMapper;
     private static ClassStorageDefineMapper classStorageDefineMapper;
     private static StorageSubscriptDefineMapper storageSubscriptDefineMapper;
     private static DataTableMapper dataTableMapper;
     private static TableMetaMapper tableMetaMapper;
+
+    static {
+        InputStream inputStream = null;
+        try {
+            inputStream = Resources.getResourceAsStream("mybatis-config-mysql-datahub.xml");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        // 构建SqlSessionFactory
+        SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(inputStream);
+        // 获取sqlSession
+        SqlSession sqlSession = sqlSessionFactory.openSession();
+
+        dataSourceMapper = sqlSession.getMapper(DataSourceMapper.class);
+        classDefineMapper = sqlSession.getMapper(ClassDefineMapper.class);
+        classPropertyDefineMapper = sqlSession.getMapper(ClassPropertyDefineMapper.class);
+        classStorageDefineMapper = sqlSession.getMapper(ClassStorageDefineMapper.class);
+        storageSubscriptDefineMapper = sqlSession.getMapper(StorageSubscriptDefineMapper.class);
+        dataTableMapper = sqlSession.getMapper(DataTableMapper.class);
+        tableMetaMapper = sqlSession.getMapper(TableMetaMapper.class);
+    }
 
     /**
      * key: global_name + "_" + length
@@ -64,7 +87,7 @@ public class GlobalManager {
     /**
      * key: table name
      */
-    private Map<String, TableMeta> allTableMeta;
+    private Map<String, Map<String, TableMeta>> allTableMeta;
 
     private GlobalManager(DataSource dataSource) {
         this.dataSource = dataSource;
@@ -76,11 +99,18 @@ public class GlobalManager {
         allTableMeta = new HashMap<>(10000);
     }
 
-    public static Map<String, String> buildGlobalDbMapNamespace(String url, String username, String password) throws CacheException {
+    public static Set<String> buildAllGlobalName() {
+        return classStorageDefineMapper.selectAllClassStorageDefine().stream()
+                .filter(o -> !Strings.isNullOrEmpty(o.getGlobalName()))
+                .map(ClassStorageDefine::getGlobalName)
+                .collect(Collectors.toSet());
+    }
+
+    public static Map<String, List<String>> buildGlobalDbMapNamespace(String url, String username, String password) throws CacheException {
         /**
          * key: global name + "_" + db name
          */
-        Map<String, String> globalDbMapNamespace = new HashMap<>(10000);
+        Map<String, List<String>> globalDbMapNamespace = new HashMap<>(10000);
 
         Database database = CacheDatabase.getDatabase (url, username, password);
 //        JBindDatabase database = new JBindDatabase(url, username, password);
@@ -93,8 +123,16 @@ public class GlobalManager {
             JSONArray globalArray = JSONArray.parseArray(globalStr);
             for (int j = 0; j < globalArray.size(); j++) {
                 JSONObject globalObject = globalArray.getJSONObject(j);
-                globalDbMapNamespace.put(String.format("%s_%s", globalObject.get("GlobalName"), globalObject.get("DBName")),
-                        namespace);
+                String key = String.format("%s_%s", globalObject.get("GlobalName"), globalObject.get("DBName"));
+                List<String> namespaces = globalDbMapNamespace.get(key);
+                if (null == namespaces) {
+                    namespaces = new LinkedList<>();
+                    namespaces.add(namespace);
+
+                    globalDbMapNamespace.put(key, namespaces);
+                } else {
+                    namespaces.add(namespace);
+                }
             }
         }
 
@@ -123,25 +161,6 @@ public class GlobalManager {
     public static Map<String, GlobalManager> buildGlobalManager() {
         // key: namespace
         Map<String, GlobalManager> allGlobalManager = new HashMap<>(16);
-        InputStream inputStream = null;
-        try {
-            inputStream = Resources.getResourceAsStream("mybatis-config-mysql-datahub.xml");
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-
-        // 构建SqlSessionFactory
-        SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(inputStream);
-        // 获取sqlSession
-        SqlSession sqlSession = sqlSessionFactory.openSession();
-
-        DataSourceMapper dataSourceMapper = sqlSession.getMapper(DataSourceMapper.class);
-        classDefineMapper = sqlSession.getMapper(ClassDefineMapper.class);
-        classPropertyDefineMapper = sqlSession.getMapper(ClassPropertyDefineMapper.class);
-        classStorageDefineMapper = sqlSession.getMapper(ClassStorageDefineMapper.class);
-        storageSubscriptDefineMapper = sqlSession.getMapper(StorageSubscriptDefineMapper.class);
-        dataTableMapper = sqlSession.getMapper(DataTableMapper.class);
-        tableMetaMapper = sqlSession.getMapper(TableMetaMapper.class);
 
         List<DataSource> dataSources = dataSourceMapper.selectAllCacheDataSource();
         for (DataSource dataSource : dataSources) {
@@ -239,8 +258,14 @@ public class GlobalManager {
     private void buildAllTableMeta() {
         List<TableMeta> tableMetas = tableMetaMapper.selectAllByDsId(dataSource.getId());
         for (TableMeta tableMeta : tableMetas) {
-            this.allTableMeta.put(String.format("%s_%s", tableMeta.getTableName(), tableMeta.getColumnName()),
-                    tableMeta);
+            Map<String, TableMeta> columns = allTableMeta.get(tableMeta.getTableName());
+            if (null == columns) {
+                columns = new HashMap<>(16);
+                columns.put(tableMeta.getColumnName(), tableMeta);
+                allTableMeta.put(tableMeta.getTableName(), columns);
+            } else {
+                columns.put(tableMeta.getColumnName(), tableMeta);
+            }
         }
     }
 
@@ -336,7 +361,7 @@ public class GlobalManager {
         return allClassInfo;
     }
 
-    public Map<String, TableMeta> getAllTableMeta() {
+    public Map<String, Map<String, TableMeta>> getAllTableMeta() {
         return allTableMeta;
     }
 }
