@@ -163,10 +163,15 @@ public class GlobalManager {
         Map<String, GlobalManager> allGlobalManager = new HashMap<>(16);
 
         List<DataSource> dataSources = dataSourceMapper.selectAllCacheDataSource();
+        Set<Integer> dsIds = dataTableMapper.selectAllByStatus().stream()
+                .map(DataTable::getDsId)
+                .collect(Collectors.toSet());
         for (DataSource dataSource : dataSources) {
-            GlobalManager globalManager = new GlobalManager(dataSource);
-            globalManager.generateRule();
-            allGlobalManager.put(dataSource.getInstanceName(), globalManager);
+            if (dsIds.contains(dataSource.getId())) {
+                GlobalManager globalManager = new GlobalManager(dataSource);
+                globalManager.generateRule();
+                allGlobalManager.put(dataSource.getInstanceName(), globalManager);
+            }
         }
 
         return allGlobalManager;

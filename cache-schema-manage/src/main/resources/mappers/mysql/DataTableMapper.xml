@@ -372,4 +372,11 @@
     from t_data_table
     where ds_id = #{dsId,jdbcType=INTEGER}
   </select>
+
+  <select id="selectAllByStatus" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List" />
+    from t_data_table
+    where status = 'ok'
+  </select>
 </mapper>
