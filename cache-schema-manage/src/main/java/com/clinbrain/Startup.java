@@ -45,7 +45,7 @@ public class Startup {
      */
     public static void main(String[] args) {
         Startup startup = new Startup();
-        startup.StartParse(startup, pop.getProperty("cache.logs.namespace"));
+        startup.StartParse(startup, pop.getProperty("cache.logs.database"));
     }
 
 
@@ -84,11 +84,10 @@ public class Startup {
        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
            @Override
            public void run() {
-               if(parseCacheLogs != null){
+               if(parseCacheLogs != null)
                    parseCacheLogs.saveOffsetInfo(errMsg);
-               }else {
+               else
                    System.out.println("Startup配置加载出错啦!!");
-               }
            }
        }));
     }

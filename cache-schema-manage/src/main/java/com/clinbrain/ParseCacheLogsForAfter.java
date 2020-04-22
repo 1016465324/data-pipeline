@@ -56,7 +56,7 @@ public class ParseCacheLogsForAfter {
             allGlobalNodeProperty = globalManager.getAllGlobalNodeProperty();
             allGlobalNodeStorage = globalManager.getAllGlobalNodeStorage();
             allClassInfo = globalManager.getAllClassInfo();
-            allTableMeta = globalManager.getAllTableMeta();
+//            allTableMeta = globalManager.getAllTableMeta();
         }catch (Exception e){
             logger.error(String.format("实时还原,加载元数据发生错误: %s", e.getMessage()));
             e.printStackTrace();
