@@ -1,17 +1,17 @@
 package com.clinbrain.util;
 
-import javax.sql.DataSource;
-import java.sql.Connection;
+import java.sql.ResultSet;
 import java.util.List;
 
 public class CacheClient extends BasicClient{
+
     private static final String driverName = "com.intersys.jdbc.CacheDriver";
 
-    public static Connection getConne(String url, String username, String password) throws Exception {
-        //Class.forName(driverName);
-        //Connection connection = DriverManager.getConnection(url, username, password);
-        DataSource connection = DBUtils.getDataSouce(driverName, url, username, password);
-        return connection.getConnection();
+    public CacheClient() {
+    }
+
+    public CacheClient(String url, String username , String password) {
+        super.init(driverName, url, username, password);
     }
 
     @Override
@@ -30,7 +30,15 @@ public class CacheClient extends BasicClient{
     }
 
     @Override
-    public List<String> qury(String database) {
-        return super.qury(database);
+    public ResultSet executeQuery(String sql) {
+        try {
+            if(stat != null) {
+                return stat.executeQuery(sql);
+            }
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+        return null;
     }
+
 }
