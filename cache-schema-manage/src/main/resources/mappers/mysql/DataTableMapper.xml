@@ -370,7 +370,7 @@
     select
     <include refid="Base_Column_List" />
     from t_data_table
-    where ds_id = #{dsId,jdbcType=INTEGER}
+    where ds_id = #{dsId,jdbcType=INTEGER} and status = 'ok'
   </select>
 
   <select id="selectAllByStatus" resultMap="BaseResultMap">

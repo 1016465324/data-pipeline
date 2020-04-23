@@ -1,8 +1,29 @@
 package com.clinbrain;
 
-import com.clinbrain.mapper.*;
-import com.clinbrain.mapper.cache.*;
-import com.clinbrain.model.*;
+import com.clinbrain.mapper.ClassDefineMapper;
+import com.clinbrain.mapper.ClassPropertyDefineMapper;
+import com.clinbrain.mapper.ClassStorageDefineMapper;
+import com.clinbrain.mapper.DataSchemaMapper;
+import com.clinbrain.mapper.DataSourceMapper;
+import com.clinbrain.mapper.DataTableMapper;
+import com.clinbrain.mapper.StorageSubscriptDefineMapper;
+import com.clinbrain.mapper.TableMetaMapper;
+import com.clinbrain.mapper.cache.CacheClassDefineMapper;
+import com.clinbrain.mapper.cache.CacheClassPropertyDefineMapper;
+import com.clinbrain.mapper.cache.CacheClassStorageDefineMapper;
+import com.clinbrain.mapper.cache.CacheDataSchemaMapper;
+import com.clinbrain.mapper.cache.CacheDataTableMapper;
+import com.clinbrain.mapper.cache.CacheStorageRowidSubscriptMapper;
+import com.clinbrain.mapper.cache.CacheStorageSubSubscriptMapper;
+import com.clinbrain.mapper.cache.CacheTableMetaMapper;
+import com.clinbrain.model.ClassDefine;
+import com.clinbrain.model.ClassPropertyDefine;
+import com.clinbrain.model.ClassStorageDefine;
+import com.clinbrain.model.DataSchema;
+import com.clinbrain.model.DataSource;
+import com.clinbrain.model.DataTable;
+import com.clinbrain.model.StorageSubscriptDefine;
+import com.clinbrain.model.TableMeta;
 import com.clinbrain.model.cache.CacheStorageRowidSubscript;
 import com.clinbrain.model.cache.CacheStorageSubSubscript;
 import com.clinbrain.util.UtilHelper;
@@ -20,7 +41,16 @@ import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -167,6 +197,7 @@ public class SchemaInfoSync {
                 for (Map.Entry<String, List<ClassPropertyDefine>> entry : allClassPropertyDefine.entrySet()) {
                     entry.getValue().forEach(o -> classPropertyDefineMapper.insert(o));
                     mysqlSession.commit();
+                    mysqlSession.clearCache();
                 }
 
                 Map<String, Set<String>> configTableInfos = allConfigTableInfo.get(namespace);
