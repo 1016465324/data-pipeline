@@ -1,16 +1,13 @@
-package com.clinbrain.util;
+package com.clinbrain.util.connection;
 
 import java.sql.ResultSet;
 import java.util.List;
 
-public class CacheClient extends BasicClient{
+public class MysqlClient extends BasicClient{
 
-    private static final String driverName = "com.intersys.jdbc.CacheDriver";
+    private static String driverName = "com.mysql.jdbc.Driver";
 
-    public CacheClient() {
-    }
-
-    public CacheClient(String url, String username , String password) {
+    public MysqlClient(String url, String username, String password) {
         super.init(driverName, url, username, password);
     }
 
@@ -31,14 +28,6 @@ public class CacheClient extends BasicClient{
 
     @Override
     public ResultSet executeQuery(String sql) {
-        try {
-            if(stat != null) {
-                return stat.executeQuery(sql);
-            }
-        }catch (Exception e){
-            e.printStackTrace();
-        }
-        return null;
+        return super.executeQuery(sql);
     }
-
 }

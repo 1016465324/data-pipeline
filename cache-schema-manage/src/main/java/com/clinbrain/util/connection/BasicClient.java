@@ -1,4 +1,6 @@
-package com.clinbrain.util;
+package com.clinbrain.util.connection;
+
+import com.clinbrain.util.DBUtils;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -14,7 +16,7 @@ public class BasicClient {
     protected static Connection conn;
     protected static Statement stat;
 
-    public void init(String driverName,String url,String username,String password){
+    protected void init(String driverName,String url,String username,String password){
         try{
             DataSource dataSouce = DBUtils.getDataSouce(driverName, url, username, password);
             conn = dataSouce.getConnection();
@@ -24,19 +26,19 @@ public class BasicClient {
         }
     }
 
-    public List<String> getDBNames() {
+    protected List<String> getDBNames() {
         return null;
     }
 
-    public List<String> getTableNames(String database) {
+    protected List<String> getTableNames(String database) {
         return null;
     }
 
-    public List<Object> getTableMetas(String database, String tableName) {
+    protected List<Object> getTableMetas(String database, String tableName) {
         return null;
     }
 
-    public ResultSet executeQuery(String sql) {
+    protected ResultSet executeQuery(String sql) {
         return null;
     }
 
