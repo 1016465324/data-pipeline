@@ -3,7 +3,6 @@ package com.clinbrain.util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.Time;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -13,7 +12,7 @@ import java.util.Date;
 public class DateTimeUtil {
 
     private static Logger logger= LoggerFactory.getLogger(DateTimeUtil.class);
-    public static final String dateString = "1841-01-01";
+    public static final String dateString = "1840-12-31";
 
     public static Date IntToDate(int day) {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
@@ -22,7 +21,7 @@ public class DateTimeUtil {
             Date date =sdf.parse(dateString);
             Calendar calendar = Calendar.getInstance();
             calendar.setTime(date);
-            calendar.add(Calendar.DATE,day-1);
+            calendar.add(Calendar.DATE,day);
             Converted=calendar.getTime();
 
         } catch (ParseException e) {
@@ -40,7 +39,7 @@ public class DateTimeUtil {
 
     }
 
-    public  static String  IntToTime(int second){
+    public  static String IntToTime(int second){
         int sec=second%60;
         int totMin=second/60;
         int min=totMin%60;
@@ -50,7 +49,7 @@ public class DateTimeUtil {
 
     }
 
-    public  static String ToTime(int num){
+    private static String ToTime(int num){
         String time="";
         if (num<10){
             return time.format("0%s",num);

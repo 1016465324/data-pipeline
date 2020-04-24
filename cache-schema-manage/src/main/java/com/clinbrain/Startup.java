@@ -4,13 +4,13 @@ import com.alibaba.fastjson.JSON;
 import com.clinbrain.util.Constans;
 import com.clinbrain.util.PopLoadUtils;
 import com.clinbrain.util.connection.CacheClient;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 
 /**
  * 日志解析启动类
@@ -21,6 +21,7 @@ public class Startup {
     private static Properties pop = new Properties();
     private static ParseCacheLogs parseCacheLogs;
     private static CacheClient cacheClient = null;
+    private static Map<String, String> offsetMap = new HashMap<>(); //下标偏移量记录
 
     static {
         try {
@@ -50,20 +51,48 @@ public class Startup {
      * 启动接口
      */
     private void StartParse(Startup startup){
+
+        String logData = "";
+        String messages = "";
+        String offset_key = ""; //namespace + dbname
+        String offset_value = ""; //处理日期 + 批处理当前下标
         String errMsg = "";
+        ResultSet rs = null;
+        int batch_index = 0;
+        long Tstart = System.currentTimeMillis();
+        List<String> resMessages = new ArrayList<>(); //返回消息体
         try {
             //1.查取数据
-            ResultSet rs = getResultLogs();
+            rs = getResultLogs();
             //2.解析开始
-            List<String> messages = parseCacheLogs.startDealWithLogs(rs);
-            //打印成表结构
-            //printToTable(messages);
-            System.out.println(JSON.parseObject(messages.get(0)).toJSONString());
+            while (rs.next()){
+                System.out.println(batch_index);
+                offset_value = String.format("%s_%s", pop.getProperty("cache.logs.dealWithTime"), batch_index);
+                batch_index++;
+                logData = rs.getString(2);
+                String[] resultArr  = parseCacheLogs.startDealWithLogs(logData);
+                offset_key = resultArr[0];
+                messages = resultArr[1];
+                if(StringUtils.isNotEmpty(offset_key)) {
+                    offsetMap.put(offset_key, offset_value); //批处理下标记录
+                    resMessages.add(messages);
+                }
+            }
+            System.out.println(String.format(String.format("处理时长总计: %s", System.currentTimeMillis() - Tstart)));
+
+            //printToTable(messages); //打印成表结构
+            resMessages.forEach(res -> {
+                String s = JSON.parseObject(res).toJSONString();
+                System.out.println(s);
+            });
+
         }catch (Exception e){
             errMsg = e.getMessage();
-            logger.error("实时数据还原过程出错: {}.", e.getMessage());
-        }finally {
-            startup.addShutdownHook(errMsg); //钩子函数
+            logger.error("实时数据还原过程出错 {}: {}.", e.getMessage(), logData);
+            //offsetMap.put(offset_key, offset_value); //批处理下标记录
+            //throw new RuntimeException(String.format("%s: %s", e.getMessage(), logData));
+        } finally {
+            startup.addShutdownHook(offsetMap, errMsg); //钩子函数
         }
     }
 
@@ -71,12 +100,12 @@ public class Startup {
     /**
      * 收尾存入下标
      */
-    private void addShutdownHook(String errMsg){
+    private void addShutdownHook(Map<String, String> offsetMap, String errMsg){
        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
            @Override
            public void run() {
                if(parseCacheLogs != null)
-                   parseCacheLogs.saveOffsetInfo(errMsg);
+                   parseCacheLogs.saveOffsetInfo(offsetMap, errMsg);
                else
                    System.out.println("Startup配置加载出错");
            }

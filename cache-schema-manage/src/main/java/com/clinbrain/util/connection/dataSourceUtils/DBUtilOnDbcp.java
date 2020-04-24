@@ -1,4 +1,4 @@
-package com.clinbrain.util;
+package com.clinbrain.util.connection.dataSourceUtils;
 
 import org.apache.commons.dbcp.BasicDataSource;
 import org.apache.commons.lang3.StringUtils;
@@ -10,11 +10,11 @@ import java.sql.Statement;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class DBUtils {
+public class DBUtilOnDbcp {
 
     private static final Map<String, DataSource> dataSourcePool = new ConcurrentHashMap<>();
 
-    private DBUtils() {}
+    private DBUtilOnDbcp() {}
 
     private static DataSource init(String driverName, String url, String username, String password) throws ClassNotFoundException {
         BasicDataSource dataSource = new BasicDataSource();
@@ -51,7 +51,7 @@ public class DBUtils {
         String dbType = getDbType(url, username, password);
         DataSource dataSource = dataSourcePool.get(dbType);
         if(dataSource == null){
-            synchronized (DBUtils.class){
+            synchronized (DBUtilOnDbcp.class){
                 dataSource = dataSourcePool.get(dbType);
                 if (dataSource == null){
                     dataSource = init(driverName, url, username, password);
@@ -71,7 +71,7 @@ public class DBUtils {
 
     public static String getDbType(String url, String username, String password) {
         String dbType = String.format("%s|%s", url, username);
-        if(!StringUtils.isEmpty(password))
+        if(StringUtils.isNotEmpty(password))
             dbType += "|" + password;
         return dbType;
     }

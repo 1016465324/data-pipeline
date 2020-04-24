@@ -9,9 +9,11 @@ import com.clinbrain.model.*;
 import com.clinbrain.rsultMessage.DataType;
 import com.clinbrain.rsultMessage.Message;
 import com.clinbrain.rsultMessage.MessageBuilder;
+import com.clinbrain.util.DateTimeUtil;
 import com.clinbrain.util.EncodeUtil;
 import com.clinbrain.util.ErrorInfo;
 import com.clinbrain.util.PopLoadUtils;
+import com.clinbrain.util.exception.ConfigLoadException;
 import com.intersys.cache.Dataholder;
 import com.intersys.objects.CacheDatabase;
 import com.intersys.objects.CacheException;
@@ -27,7 +29,6 @@ import scala.Tuple2;
 import scala.Tuple4;
 
 import java.io.InputStream;
-import java.sql.ResultSet;
 import java.util.*;
 
 import static com.intersys.objects.Database.RET_PRIM;
@@ -47,7 +48,6 @@ public class ParseCacheLogs {
     private static Map<String, List<String>> namespaceMap;
     private static Map<String, Database> cacheQueryConnMap = new HashMap<>();
     private static Map<String, String> localCacheDataMap = new HashMap<>(); //本地缓存日志
-    private static Map<String, String> offsetMap = new HashMap<>(); //下标偏移量记录
     private static Set<String> globalNames;
     private static SqlSession sqlSession;
     private static ParseLogsMapper parseLogsMapper;
@@ -68,7 +68,6 @@ public class ParseCacheLogs {
             parseLogDetailsMapper = sqlSession.getMapper(ParseLogDetailsMapper.class);
         }catch (Exception e){
             logger.error("实时还原,加载元数据发生错误: {}.", e.getMessage());
-            //e.printStackTrace();
             throw new RuntimeException(String.format("实时还原,加载元数据发生错误: %s", e.getMessage()));
         }
     }
@@ -78,124 +77,103 @@ public class ParseCacheLogs {
      * deal cachelogs
      * @return
      */
-    public static List<String> startDealWithLogs(ResultSet rs) throws Exception{
-        //造数据
-        //String str = "{\"Before\":\"[26,\\\"碘1\\\",\\\"Y\\\"]\",\"Address\":3735756,\"RecordType\":\"S\",\"GlobalReference\":\"DHCALLGYKEY(19)\",\"InTransaction\":1,\"After\":\"[26,\\\"碘\\\",\\\"Y\\\"]\",\"DBName\":\"DHC-DATA\",\"Glob\":\"DHCALLGYKEY\",\"Timestamp\":\"2020-04-11 15:51:03\"}";
-        //ArrayList<String> dataSourceDist = new ArrayList<>();
-        //for (int i = 0; i < 1000000; i++) {
-        //    dataSourceDist.add(str);
-        //}
-        //for (String data : dataSourceDist) {
-        //parse = JSON.parseObject(data);
+    public static String[] startDealWithLogs(String logData) throws Exception{
 
-        List<String> resMessages = new ArrayList<>(); //返回消息体
-        long Tstart = System.currentTimeMillis();
-        String offset_key = ""; //namespace + dbname
-        String offset_value; //处理日期 + 批处理当前下标
-        int batch_index = 0;
-        while (rs.next()) {
-            System.out.println(batch_index);
-            offset_value = String.format("%s_%s", pop.getProperty("cache.logs.dealWithTime"), batch_index);
-            batch_index++;
-            JSONObject parse = null;
-            try{
-                //1.获取得到对应数据部分、global名称
-                parse = JSON.parseObject(rs.getString(2));
-                if(parse == null){
-                    throw new RuntimeException(ErrorInfo.getErrDesc(ErrorInfo.PARSE_JSON_ERROR));
-                }
-                logger.info("正在处理数据: {}.", parse.toJSONString());
+        String message = null;
+        String[] resultArr = new String[2];
+        //1.获取得到对应数据部分、global名称
+        JSONObject parse = JSON.parseObject(logData);
+        if(parse == null){
+            throw new IllegalArgumentException(ErrorInfo.getErrDesc(ErrorInfo.PARSE_JSON_ERROR));
+        }
+        logger.info("正在处理数据: {}.", parse.toJSONString());
 
-                //4.剃除非处理数据
-                if (!globalNames.contains(String.format("%s%s", "^", parse.getString("Glob"))))
-                    continue;
+        //2.剃除非处理数据
+        if (globalNames.contains(String.format("%s%s", "^", parse.getString("Glob")))) {
 
-                //TODO 本地缓存当前日志数据
-                //localCacheDataMap.put(globAlias, parse.toJSONString());
+            //localCacheDataMap.put(globAlias, parse.toJSONString()); //TODO 本地缓存当前日志数据
 
-                //3.处理log中global内容
-                Object[] objects = getGlobalDefInfos(parse); //格式化globalName
-                if (objects == null) {
-                    //logger.warn("当前global格式异常:{}", parse.getString("GlobalReference"));
-                    continue;
-                }
+            //3.处理log中global内容
+            Object[] objects = getGlobalDefInfos(parse); //格式化globalName
+            if (objects != null) {
                 String globParseName = (String) objects[0];
                 String[] logExpressArr = (String[]) objects[1]; //expression节点集
 
-                //2.获取配置项
+                //4.获取配置项
                 String dbName = parse.getString("DBName");
                 List<String> namespaces = namespaceMap.get(String.format("%s_%s", parse.getString("Glob"), dbName));//得到namespace
 
-                boolean isNamespaceFlag = false;
-                for(String nameSpace : namespaces) { //匹配日志对应namespace
-                    if(isNamespaceFlag) //配置只允许配置一个对应namespace, 找到处理即跳出
-                        break;
-
-                    offset_key = String.format("%s_%s", nameSpace, dbName); //日志记录key值
-
-                    GlobalManager globManager = allGlobalManager.get(nameSpace); //根据dbName获取相应配置加载类
-                    if (globManager == null) {
-                        throw new RuntimeException(ErrorInfo.getErrDesc(ErrorInfo.GLOBMANAGER_NOTFOUND));
-                    }
-                    Map<String, List<Tuple2<List<StorageSubscriptDefine>, List<ClassPropertyDefine>>>> allGlobalNodeStorage = globManager.getAllGlobalNodeStorage();
-                    Map<String, Set<String>> allGlobalNodeOfClass = globManager.getAllGlobalNodeOfClass();
-                    Map<String, Tuple4<ClassDefine, List<ClassStorageDefine>, List<ClassPropertyDefine>, DataTable>> allClassInfo = globManager.getAllClassInfo();
-
-                    //5.开始处理数据
-                    List<Tuple2<List<StorageSubscriptDefine>, List<ClassPropertyDefine>>> tuple2s = allGlobalNodeStorage.get(globParseName); //根据globalParseName得到节点、属性二元组
-                    for (Tuple2<List<StorageSubscriptDefine>, List<ClassPropertyDefine>> tuple2 : tuple2s) { //定位当前global对应property
-                        if (compareGlobalNodeInfo(logExpressArr, tuple2._1)) { //global匹配上了
-                            isNamespaceFlag = true;
-                            String globName = parse.getString("Glob");
-                            String globalAlias = getGlobalAlias(globName, tuple2._1); //组装全称
-                            List<ClassPropertyDefine> classPropDef = tuple2._2;
-                            String className = classPropDef.get(0).getClassName(); //得到当前global对应类
-                            Tuple4<ClassDefine, List<ClassStorageDefine>, List<ClassPropertyDefine>, DataTable> classDefTabTuple4 = allClassInfo.get(className);
-                            if (classDefTabTuple4 == null) { //未匹配到类下属性，不作处理
-                                logger.warn("当前global:{}对应class:{}未匹配到属性信息，不作处理", parse.getString("Glob"), className);
-                                saveErrInfo(new ParseLogs(offset_key, offset_value, 1), new ParseLogDetails(
-                                        String.format("当前global: %s对应class: %s未匹配到属性信息，不作处理", parse.getString("Glob"), className)));
-                                continue;
-                            }
-
-                            String rowidName = classDefTabTuple4._2().get(0).getSqlRowidName(); //rowidName
-                            Map<String, String> idsMap = buildRowId(logExpressArr, tuple2._1, classDefTabTuple4);//构建rowId、parentId、childsubId
-                            List<String> allGlobDefs = new ArrayList<>(allGlobalNodeOfClass.get(className)); //得到类对应所有global定义
-                            Map<String, String> globMap = buildGlobal(logExpressArr, tuple2._1, allGlobDefs); //替换变量为真实值
-                            DataTable dataTable = classDefTabTuple4._4(); //得到数据表信息
-                            if (dataTable == null) {
-                                logger.warn("当前global:{}未匹配到datatable信息,不作处理", parse.getString("Glob"));
-                                saveErrInfo(new ParseLogs(offset_key, offset_value, 1), new ParseLogDetails(
-                                        String.format("当前global: %s未匹配到datatable信息,不作处理", parse.getString("Glob"))));
-                                continue;
-                            }
-
-                            String schemaName = dataTable.getSchemaName(); // schemaName
-                            String tableName = dataTable.getTableName(); // 表名
-                            String[] paramArr = new String[]{schemaName, tableName, globalAlias, className, nameSpace, rowidName}; //参数
-                            String message;
-                            if (allGlobDefs.size() > 1) { //多个global批处理
-                                message = buildMsgByMultpGlob(globMap, parse, idsMap, globManager, paramArr);
-                                resMessages.add(message);
-                                //kafkaSink.sendMessage(pop.getProperty("cache.topic"), 1, message, dbName); //发送kafka
-                            } else { //单个global赋值此条数据
-                                message = buildMsgBySiglrGlob(allGlobDefs.get(0), parse, idsMap, globManager, paramArr);
-                                resMessages.add(message);
-                                //kafkaSink.sendMessage(pop.getProperty("cache.topic"), 1, message, dbName); //发送kafka
-                            }
+                if(namespaces != null) {
+                    boolean isNamespaceFlag = false;
+                    for (String nameSpace : namespaces) { //匹配日志对应namespace
+                        if (isNamespaceFlag) //配置只允许配置一个对应namespace, 找到处理即跳出
                             break;
+
+                        GlobalManager globManager = allGlobalManager.get(nameSpace); //根据dbName获取相应配置加载类
+                        if (globManager == null) {
+                            throw new ConfigLoadException(ErrorInfo.getErrDesc(ErrorInfo.GLOBMANAGER_NOTFOUND));
+                        }
+                        Map<String, List<Tuple2<List<StorageSubscriptDefine>, List<ClassPropertyDefine>>>> allGlobalNodeStorage = globManager.getAllGlobalNodeStorage();
+                        Map<String, Set<String>> allGlobalNodeOfClass = globManager.getAllGlobalNodeOfClass();
+                        Map<String, Tuple4<ClassDefine, List<ClassStorageDefine>, List<ClassPropertyDefine>, DataTable>> allClassInfo = globManager.getAllClassInfo();
+
+                        //5.开始处理数据
+                        List<Tuple2<List<StorageSubscriptDefine>, List<ClassPropertyDefine>>> tuple2s = allGlobalNodeStorage.get(globParseName); //根据globalParseName得到节点、属性二元组
+                        for (Tuple2<List<StorageSubscriptDefine>, List<ClassPropertyDefine>> tuple2 : tuple2s) { //定位当前global对应property
+                            if (compareGlobalNodeInfo(logExpressArr, tuple2._1)) { //global匹配上了
+                                isNamespaceFlag = true;
+                                String globName = parse.getString("Glob");
+                                String globalAlias = getGlobalAlias(globName, tuple2._1); //组装全称
+                                List<ClassPropertyDefine> classPropDef = tuple2._2;
+                                String className = classPropDef.get(0).getClassName(); //得到当前global对应类
+                                Tuple4<ClassDefine, List<ClassStorageDefine>, List<ClassPropertyDefine>, DataTable> classDefTabTuple4 = allClassInfo.get(className);
+                                if (classDefTabTuple4 == null) { //未匹配到类下属性，不作处理
+                                    logger.warn("当前global:{}对应class:{}未匹配到属性信息，不作处理", parse.getString("Glob"), className);
+                                    //saveErrInfo(new ParseLogs(offset_key, offset_value, 1), new ParseLogDetails(
+                                    //          String.format("当前global: %s对应class: %s未匹配到属性信息，不作处理", parse.getString("Glob"), className)));
+                                    continue;
+                                }
+
+                                String rowidName = classDefTabTuple4._2().get(0).getSqlRowidName(); //rowidName
+                                Map<String, String> idsMap = buildRowId(logExpressArr, tuple2._1, classDefTabTuple4);//构建rowId、parentId、childsubId
+                                List<String> allGlobDefs = new ArrayList<>(allGlobalNodeOfClass.get(className)); //得到类对应所有global定义
+                                Map<String, String> globMap = buildGlobal(logExpressArr, tuple2._1, allGlobDefs); //替换变量为真实值
+                                DataTable dataTable = classDefTabTuple4._4(); //得到数据表信息
+                                if (dataTable == null) {
+                                    logger.warn("当前global:{}未匹配到datatable信息,不作处理", parse.getString("Glob"));
+                                    //saveErrInfo(new ParseLogs(offset_key, offset_value, 1), new ParseLogDetails(
+                                    //          String.format("当前global: %s未匹配到datatable信息,不作处理", parse.getString("Glob"))));
+                                    continue;
+                                }
+
+                                String schemaName = dataTable.getSchemaName(); // schemaName
+                                String tableName = dataTable.getTableName(); // 表名
+                                String[] paramArr = new String[]{schemaName, tableName, globalAlias, className, nameSpace, rowidName}; //参数
+
+                                if (allGlobDefs.size() > 1) { //多个global批处理
+                                    message = buildMsgByMultpGlob(globMap, parse, idsMap, globManager, paramArr);
+                                    //kafkaSink.sendMessage(pop.getProperty("cache.topic"), 1, message, dbName); //发送kafka
+                                } else { //单个global赋值此条数据
+                                    message = buildMsgBySiglrGlob(allGlobDefs.get(0), parse, idsMap, globManager, paramArr);
+                                    //kafkaSink.sendMessage(pop.getProperty("cache.topic"), 1, message, dbName); //发送kafka
+                                }
+
+                                //返回体
+                                String offset_key = String.format("%s", dbName); //日志记录key值
+                                resultArr[0] = offset_key;
+                                resultArr[1] = message;
+                                break;
+                            }
                         }
                     }
+                }else {
+                    //logger.warn("为获取到namespace异常");
                 }
-            }catch (Exception e){
-                logger.error("{}.: {}.", e.getMessage(), rs.getString(2));
-                offsetMap.put(offset_key, offset_value); //批处理下标记录
-                throw new RuntimeException(String.format("%s: %s", e.getMessage(), rs.getString(2)));
+            }else {
+                //logger.warn("当前global格式异常:{}", parse.getString("GlobalReference"));
             }
-            offsetMap.put(offset_key, offset_value); //批处理下标记录
         }
-        System.out.println(String.format(String.format("处理时长总计: %s", System.currentTimeMillis() - Tstart)));
-        return resMessages;
+        return resultArr;
     }
 
 
@@ -262,7 +240,7 @@ public class ParseCacheLogs {
                     after = globAndJSobj.getValue().getJSONArray("After") == null ? new JSONArray() : globAndJSobj.getValue().getJSONArray("After");
                     before = globAndJSobj.getValue().getJSONArray("Before") == null ? new JSONArray() : globAndJSobj.getValue().getJSONArray("Before");
                     buildMSG(globDef, after, before, afterRowDataValues, beforeRowDataValues, afterBuilder,
-                            beforeBuilder, tableName, globManager); //构建数据部分
+                            beforeBuilder, nameSpace, tableName, globManager); //构建数据部分
                 }
             }
 
@@ -275,7 +253,7 @@ public class ParseCacheLogs {
                     after = jsonObject.getJSONArray("globalValue");
                     //before = after; //before取after??
                     buildMSG(globDef, after, after, afterRowDataValues, beforeRowDataValues, afterBuilder,
-                            beforeBuilder, tableName, globManager); //构建数据部分
+                            beforeBuilder, nameSpace, tableName, globManager); //构建数据部分
                 }
             }
         }catch (Exception e){
@@ -307,7 +285,6 @@ public class ParseCacheLogs {
      */
     private static String buildMsgBySiglrGlob(String global, JSONObject parse, Map<String, String> idsMap, GlobalManager globManager,
                                               String[] paramArr) throws Exception{
-
         /**
          * 类定义参数
          */
@@ -337,7 +314,7 @@ public class ParseCacheLogs {
         JSONArray before = parse.getJSONArray("Before") == null ? new JSONArray() : parse.getJSONArray("Before");
 
         buildMSG(global, after, before, afterRowDataValues, beforeRowDataValues, afterBuilder,
-                beforeBuilder, tableName, globManager);//构建数据部分
+                beforeBuilder, nameSpace, tableName, globManager);//构建数据部分
 
         //追加rowId、parentId、childsubId
         for (Map.Entry<String, String> id : idsMap.entrySet()) {
@@ -360,8 +337,7 @@ public class ParseCacheLogs {
      * @param globalDef
      */
     private static void buildMSG(String globalDef, JSONArray after, JSONArray before, List<Object> afterRowDataValues, List<Object> beforeRowDataValues,
-                                 MessageBuilder afterBuilder, MessageBuilder beforeBuilder, String tableName, GlobalManager globManager) throws Exception{
-
+                                 MessageBuilder afterBuilder, MessageBuilder beforeBuilder, String nameSpace, String tableName, GlobalManager globManager) throws Exception{
         //当前global对应属性
         List<ClassPropertyDefine> fields = globManager.getAllGlobalNodeProperty().get(globalDef);
         int columanLength = fields.size(); //整表字段个长
@@ -374,13 +350,13 @@ public class ParseCacheLogs {
 
             //after处理
             if(i < afterLength) //有值则加载after对应数据
-                buidMsgNotEmpty(classPropDef, after, tableName, afterRowDataValues, afterBuilder, globManager);
+                buidMsgNotEmpty(classPropDef, after, nameSpace, tableName, afterRowDataValues, afterBuilder, globManager);
             else  //否则默认给空值补上
                 buidMsgEmpty(classPropDef, tableName, afterRowDataValues, afterBuilder, globManager);
 
             //before处理
             if(i < beforeLength)  //有值则加载before对应数据
-                buidMsgNotEmpty(classPropDef, before, tableName, beforeRowDataValues, beforeBuilder, globManager);
+                buidMsgNotEmpty(classPropDef, before, nameSpace, tableName, beforeRowDataValues, beforeBuilder, globManager);
             else  //否则默认给空值补上
                 buidMsgEmpty(classPropDef, tableName, beforeRowDataValues, beforeBuilder, globManager);
         }
@@ -394,22 +370,22 @@ public class ParseCacheLogs {
      * @param rowDataValues
      * @param builder
      */
-    private static void buidMsgNotEmpty(ClassPropertyDefine classPropDef, JSONArray valueArr, String tableName,
+    private static void buidMsgNotEmpty(ClassPropertyDefine classPropDef, JSONArray valueArr, String nameSpace, String tableName,
                                         List<Object> rowDataValues, MessageBuilder builder, GlobalManager globManager) throws Exception{
 
         int storePiece = Integer.parseInt(classPropDef.getStoragePiece()) - 1; //属性下标, 按属性下标-1取数据值
         String colName = classPropDef.getSqlFieldName(); //columnName
-        String colType = "varchar"; //columnType
-        String table_field = tableName + "_" + colName; //findTypeKey
-        //Map<String, TableMeta> allTableMeta = globManager.getAllTableMeta(); TODO //allTableMeta
-        Map<String, Map<String, TableMeta>> allTableMetaMap = globManager.getAllTableMeta(); //allTableMeta
-        Map<String, TableMeta> allTableMeta = allTableMetaMap.get(tableName);
+        String colType = "varchar"; //columnType 默认varchar
+//        String table_field = tableName + "_" + colName; //findTypeKey
+        String table_field = colName; //findTypeKey
+        Map<String, Map<String, TableMeta>> allTableMetas = globManager.getAllTableMeta();//allTableMetas
+        Map<String, TableMeta> allTableMeta = allTableMetas.get(tableName); //allTableMeta
 
         if(StringUtils.equalsIgnoreCase(classPropDef.getPropertyCollection(), "list")){ //属性为list类型则作list对应格式拼接
-            colType = allTableMeta.get(table_field).getDataType(); //columnType
+            colType = allTableMeta.get(table_field).getDataType(); //columnType取自tableMeta
             if(valueArr.get(storePiece) instanceof String){
                 rowDataValues.add("null");
-                builder.appendSchema(colName, DataType.convertCacheToHiveDataType(colType), false, false); //columnName
+                builder.appendSchema(colName, DataType.convertTypeCacheToHive(colType), false, false); //columnName
             }else {
                 JSONArray sub_ListArr = valueArr.getJSONArray(storePiece);
                 StringBuilder sb = new StringBuilder();
@@ -421,7 +397,7 @@ public class ParseCacheLogs {
                 }
                 String sub_ListValue = EncodeUtil.unicodeToString(sb.delete(sb.lastIndexOf(","), sb.length()).toString()); //转掉Unicode
                 rowDataValues.add(sub_ListValue);
-                builder.appendSchema(colName, DataType.convertCacheToHiveDataType(colType), false, false); //columnName
+                builder.appendSchema(colName, DataType.convertTypeCacheToHive(colType), false, false); //columnName
             }
         }else if(!StringUtils.startsWith(classPropDef.getRuntimeType(), "%")){ //属性为对象类型则找子属性
             //根据对象属性找到其子属性
@@ -438,24 +414,65 @@ public class ParseCacheLogs {
                             StringUtils.isEmpty(subSeriClassPropDef.get(j).getStoragePiece())){
                         continue;
                     }
+                    String sub_clsPopColType = subSeriClassPropDef.get(j).getRuntimeType(); //取自classProperty
                     int sub_storePiece = Integer.parseInt(subSeriClassPropDef.get(j).getStoragePiece()) - 1; //属性类子属性下标
                     sub_colName = String.format("%s_%s", colName, subSeriClassPropDef.get(j).getSqlFieldName());
                     sub_colType = allTableMeta.get(String.format("%s_%s", table_field, subSeriClassPropDef.get(j).getSqlFieldName())).getDataType();
                     sub_colValue = EncodeUtil.unicodeToString(subSeriJsonArr.getString(sub_storePiece)); //转掉unicode
 
-                    rowDataValues.add(sub_colValue);
-                    builder.appendSchema(sub_colName, DataType.convertCacheToHiveDataType(sub_colType), false, false); //columnName
+                    String value = "";
+                    if(StringUtils.equalsIgnoreCase(sub_clsPopColType, "%Library.Date")) {
+                        value = converValueTimeOrDate(value, "date");
+                        colType = "Date";
+                    }else if(StringUtils.equalsIgnoreCase(sub_clsPopColType, "%Library.Time")) {
+                        value = converValueTimeOrDate(value, "time");
+                        colType = "Time";
+                    }else {
+                        value = sub_colValue;
+                    }
+
+                    rowDataValues.add(value);
+                    builder.appendSchema(sub_colName, DataType.convertTypeCacheToHive(colType), false, false); //columnName
                 }
             }else { //持久类型
                 String colvalue = EncodeUtil.unicodeToString(valueArr.getString(storePiece)); //转掉unicode
                 rowDataValues.add(colvalue);
-                builder.appendSchema(colName, DataType.convertCacheToHiveDataType(colType), false, false); //columnName
+                builder.appendSchema(colName, DataType.convertTypeCacheToHive(colType), false, false); //columnName
             }
+        }else if(StringUtils.equals(classPropDef.getRuntimeType(), "%Library.GlobalCharacterStream") ||
+            StringUtils.equals(classPropDef.getRuntimeType(), "%Library.GlobalBinaryStream")){ //流存储格式
+            String colValueAddr = valueArr.getString(storePiece); //存储global地址
+            List<String> queryGlobs = new ArrayList<>();
+            queryGlobs.add(colValueAddr);
+            List<JSONObject> QueryJsonObjList = getLogsByQuery(nameSpace, classPropDef.getClassName(), queryGlobs); //查找对应数据
+            if(QueryJsonObjList.size() > 0){
+                JSONObject jsonObject = QueryJsonObjList.get(0);
+                String colvalue = EncodeUtil.unicodeToString(jsonObject.getJSONArray("globalValue").getString(0)); //流值
+                rowDataValues.add(colvalue);
+            }else {
+                rowDataValues.add("null");
+            }
+            builder.appendSchema(colName, DataType.convertTypeCacheToHive(colType), false, false);
+
         }else { //一般属性
-            colType = allTableMeta.get(table_field).getDataType(); //columnType
-            String colvalue = EncodeUtil.unicodeToString(valueArr.getString(storePiece)); //转掉unicode
+
+            colType = allTableMeta.get(table_field).getDataType(); //columnType取自tableMeta
+            String value = EncodeUtil.unicodeToString(valueArr.getString(storePiece)); //转掉unicode
+            String clsPopColType = classPropDef.getRuntimeType(); //取自classProperty
+
+            String colvalue = "";
+            if(StringUtils.equalsIgnoreCase(clsPopColType, "%Library.Date")) {
+                colvalue = converValueTimeOrDate(value, "date");
+                colType = "Date";
+            }else if(StringUtils.equalsIgnoreCase(clsPopColType, "%Library.Time")) {
+                colvalue = converValueTimeOrDate(value, "time");
+                colType = "Time";
+            }else {
+                colvalue = value;
+            }
+
             rowDataValues.add(colvalue); //columnValue
-            builder.appendSchema(colName, DataType.convertCacheToHiveDataType(colType), false, false); //columnName
+            builder.appendSchema(colName, DataType.convertTypeCacheToHive(colType), false, false); //columnName
         }
     }
 
@@ -471,8 +488,8 @@ public class ParseCacheLogs {
         String colName = classPropDef.getSqlFieldName(); //columnName
         String colType = "varchar"; //columnType
         String table_field = tableName + "_" + colName; //findTypeKey
-//        Map<String, TableMeta> allTableMeta = globManager.getAllTableMeta(); //allTableMeta
-        Map<String, TableMeta> allTableMeta = new HashMap<>(); //allTableMeta
+        Map<String, Map<String, TableMeta>> allTableMetas = globManager.getAllTableMeta();//allTableMetas
+        Map<String, TableMeta> allTableMeta = allTableMetas.get(tableName); //allTableMeta
 
         if(!StringUtils.startsWith(classPropDef.getRuntimeType(), "%")){ //属性为对象类型则找子属性
             //根据对象属性找到其子属性
@@ -492,15 +509,15 @@ public class ParseCacheLogs {
                     sub_colType = allTableMeta.get(String.format("%s_%s", table_field, subSeriClassPropDef.get(j).getSqlFieldName())).getDataType();
 
                     rowDataValues.add("null");
-                    builder.appendSchema(sub_colName, DataType.convertCacheToHiveDataType(sub_colType), false, false); //columnName
+                    builder.appendSchema(sub_colName, DataType.convertTypeCacheToHive(sub_colType), false, false); //columnName
                 }
             }else { //持久类型
                 rowDataValues.add("null");
-                builder.appendSchema(colName, DataType.convertCacheToHiveDataType(colType), false, false); //columnName
+                builder.appendSchema(colName, DataType.convertTypeCacheToHive(colType), false, false); //columnName
             }
         }else { //一般属性
             rowDataValues.add("null");
-            builder.appendSchema(colName, DataType.convertCacheToHiveDataType(colType), false, false); //columnName
+            builder.appendSchema(colName, DataType.convertTypeCacheToHive(colType), false, false); //columnName
         }
     }
 
@@ -724,9 +741,32 @@ public class ParseCacheLogs {
 
 
     /**
+     * 将毫秒值转为日期格式
+     * @param colValue
+     * @param colType
+     * @return
+     */
+    private static String converValueTimeOrDate(String colValue, String colType){
+        String type = colType.toLowerCase();
+        String value;
+        switch (type){
+            case "date":
+                value = DateTimeUtil.IntToShortDate(Integer.parseInt(colValue));
+                break;
+            case "time":
+                value = DateTimeUtil.IntToTime(Integer.parseInt(colValue));
+                break;
+            default:
+                value = colValue;
+        }
+        return value;
+    }
+
+
+    /**
      * 启用钩子函数_下标记录
      */
-    public void saveOffsetInfo(String errMsg) {
+    public void saveOffsetInfo(Map<String, String> offsetMap, String errMsg) {
         for (Map.Entry<String, String> offset : offsetMap.entrySet()) {
             String logId = UUID.randomUUID().toString();
             ParseLogs parseLogs = new ParseLogs();
@@ -798,7 +838,6 @@ public class ParseCacheLogs {
         for (StorageSubscriptDefine subscriptDefine : subscriptDefines) {
                 sb.append(subscriptDefine.getExpression()).append(",");
         }
-
         //throw new NullPointerException("空指针啦。。。。");
         //throw new IllegalAccessException("参数错误！");
         return  sb.toString().substring(0, sb.toString().lastIndexOf(",")) + ")";
@@ -821,6 +860,19 @@ public class ParseCacheLogs {
             }
         }
         return flag;
+    }
+
+
+    /**
+     * 测试流字段反查逻辑
+     * @param args
+     * @throws Exception
+     */
+    public static void main(String[] args) throws Exception{
+        List<String> global = new ArrayList<>();
+//        global.add("^DHCEMRI.InstanceDataS(11,1)");
+        global.add("^DHCEMRI.InstanceDataS(3,1)");
+        getLogsByQuery("DHC-APP", "User.PACEmployeeType", global);
     }
 
 }

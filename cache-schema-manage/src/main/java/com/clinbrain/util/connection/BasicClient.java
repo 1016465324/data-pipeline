@@ -1,6 +1,6 @@
 package com.clinbrain.util.connection;
 
-import com.clinbrain.util.DBUtils;
+import com.clinbrain.util.connection.dataSourceUtils.DBUtilOnDbcp;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -18,8 +18,9 @@ public class BasicClient {
 
     protected void init(String driverName,String url,String username,String password){
         try{
-            DataSource dataSouce = DBUtils.getDataSouce(driverName, url, username, password);
-            conn = dataSouce.getConnection();
+            DataSource dataSource = DBUtilOnDbcp.getDataSouce(driverName, url, username, password); //dbcp
+//            DataSource dataSource = DBUtilOnDruid.getDataSource(driverName, url, username, password); //druid
+            conn = dataSource.getConnection();
             stat = conn.createStatement();
         }catch (Exception e){
             e.printStackTrace();

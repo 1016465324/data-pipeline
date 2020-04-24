@@ -170,7 +170,7 @@ public enum DataType {
      * @param type
      * @return
      */
-    public static DataType convertCacheToHiveDataType(String type) {
+    public static DataType convertTypeCacheToHive(String type) {
         type = type.toUpperCase();
         DataType datatype = null;
         switch (type) {
