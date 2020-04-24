@@ -25,10 +25,10 @@ public class DBUtils {
         dataSource.setUsername(username);
         dataSource.setPassword(password);
 
-        dataSource.setInitialSize(100);
-        dataSource.setMaxActive(80);
-        dataSource.setMaxIdle(50);
-        dataSource.setMinIdle(10);
+        dataSource.setInitialSize(10);
+        dataSource.setMaxActive(8);
+        dataSource.setMaxIdle(5);
+        dataSource.setMinIdle(1);
 
         dataSource.setTestOnBorrow(false); //检查连接有效性
 

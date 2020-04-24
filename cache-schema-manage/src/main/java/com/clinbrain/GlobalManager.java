@@ -179,8 +179,6 @@ public class GlobalManager {
 
 
     public void generateRule() {
-        buildAllTableMeta();
-
         Map<String, List<StorageSubscriptDefine>> allStorageSubscriptDefine = storageSubscriptDefineMapper.selectAllByDsId(dataSource.getId()).stream()
                 .collect(Collectors.groupingBy(StorageSubscriptDefine::getStorageName));
         List<ClassStorageDefine> classStorageDefineList = classStorageDefineMapper.selectAllByDsId(dataSource.getId());
@@ -260,16 +258,19 @@ public class GlobalManager {
         }
     }
 
-    private void buildAllTableMeta() {
+    private void buildAllTableMeta(List<DataTable> dataTables) {
+        Set<String> tableNames = dataTables.stream().map(DataTable::getTableName).collect(Collectors.toSet());
         List<TableMeta> tableMetas = tableMetaMapper.selectAllByDsId(dataSource.getId());
         for (TableMeta tableMeta : tableMetas) {
-            Map<String, TableMeta> columns = allTableMeta.get(tableMeta.getTableName());
-            if (null == columns) {
-                columns = new HashMap<>(16);
-                columns.put(tableMeta.getColumnName(), tableMeta);
-                allTableMeta.put(tableMeta.getTableName(), columns);
-            } else {
-                columns.put(tableMeta.getColumnName(), tableMeta);
+            if (tableNames.contains(tableMeta.getTableName())) {
+                Map<String, TableMeta> columns = allTableMeta.get(tableMeta.getTableName());
+                if (null == columns) {
+                    columns = new HashMap<>(16);
+                    columns.put(tableMeta.getColumnName(), tableMeta);
+                    allTableMeta.put(tableMeta.getTableName(), columns);
+                } else {
+                    columns.put(tableMeta.getColumnName(), tableMeta);
+                }
             }
         }
     }
@@ -278,13 +279,15 @@ public class GlobalManager {
                                    List<ClassPropertyDefine> classPropertyDefineList) {
         Map<String, List<ClassStorageDefine>> allClassStorageDefineOfClass = classStorageDefineList
                 .stream().collect(Collectors.groupingBy(ClassStorageDefine::getClassName));
-        Map<String, DataTable> allDataTable = dataTableMapper.selectAllByDsId(dataSource.getId()).stream()
+        List<DataTable> dataTables = dataTableMapper.selectAllByDsId(dataSource.getId());
+        Map<String, DataTable> allDataTable = dataTables.stream()
                 .collect(Collectors.toMap(DataTable::getClassName, o -> o));
         Map<String, ClassDefine> allClassDefine = classDefineMapper.selectAllByDsId(dataSource.getId()).stream()
                 .collect(Collectors.toMap(ClassDefine::getClassName, o -> o));
         Map<String, List<ClassPropertyDefine>> allPropertyDefineOfClass = classPropertyDefineList.stream()
                 .collect(Collectors.groupingBy(ClassPropertyDefine::getClassName));
 
+        buildAllTableMeta(dataTables);
         for (Map.Entry<String, ClassDefine> entry : allClassDefine.entrySet()) {
             List<ClassPropertyDefine> classPropertyDefines = allPropertyDefineOfClass.get(entry.getKey());
             List<ClassStorageDefine> classStorageDefines = allClassStorageDefineOfClass.get(entry.getKey());

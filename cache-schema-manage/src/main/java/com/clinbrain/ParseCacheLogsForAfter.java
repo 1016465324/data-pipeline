@@ -7,7 +7,6 @@ import com.clinbrain.model.*;
 import com.clinbrain.rsultMessage.DataType;
 import com.clinbrain.rsultMessage.Message;
 import com.clinbrain.rsultMessage.MessageBuilder;
-import com.clinbrain.util.CacheClient;
 import com.clinbrain.util.Constans;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -47,7 +46,8 @@ public class ParseCacheLogsForAfter {
             FileInputStream fs = new FileInputStream("D:\\workspace\\data-pipeline\\cache-schema-manage\\src\\main\\resources\\application.properties");
             pop.load(fs);
             // 加载cacheConne
-            Connection cacheConn = CacheClient.getConne(pop.getProperty("cache.url"), pop.getProperty("cache.username"), pop.getProperty("cache.password"));
+//            Connection cacheConn = CacheClient.getConne(pop.getProperty("cache.url"), pop.getProperty("cache.username"), pop.getProperty("cache.password"));
+            Connection cacheConn = null;
             cacheStat = cacheConn.createStatement();
             // 加载cache配置
 //            globalManager = new GlobalManager();
