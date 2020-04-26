@@ -30,6 +30,7 @@ import scala.Tuple4;
 
 import java.io.InputStream;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.intersys.objects.Database.RET_PRIM;
 
@@ -126,19 +127,19 @@ public class ParseCacheLogs {
                                 String globalAlias = getGlobalAlias(globName, tuple2._1); //组装全称
                                 List<ClassPropertyDefine> classPropDef = tuple2._2;
                                 String className = classPropDef.get(0).getClassName(); //得到当前global对应类
-                                Tuple4<ClassDefine, List<ClassStorageDefine>, List<ClassPropertyDefine>, DataTable> classDefTabTuple4 = allClassInfo.get(className);
-                                if (classDefTabTuple4 == null) { //未匹配到类下属性，不作处理
+                                Tuple4<ClassDefine, List<ClassStorageDefine>, List<ClassPropertyDefine>, DataTable> clsDefTabTup4 = allClassInfo.get(className);
+                                if (clsDefTabTup4 == null) { //未匹配到类下属性，不作处理
                                     logger.warn("当前global:{}对应class:{}未匹配到属性信息，不作处理", parse.getString("Glob"), className);
                                     //saveErrInfo(new ParseLogs(offset_key, offset_value, 1), new ParseLogDetails(
                                     //          String.format("当前global: %s对应class: %s未匹配到属性信息，不作处理", parse.getString("Glob"), className)));
                                     continue;
                                 }
 
-                                String rowidName = classDefTabTuple4._2().get(0).getSqlRowidName(); //rowidName
-                                Map<String, String> idsMap = buildRowId(logExpressArr, tuple2._1, classDefTabTuple4);//构建rowId、parentId、childsubId
+                                String rowidName = clsDefTabTup4._2().get(0).getSqlRowidName(); //rowidName
+                                Map<String, String> idsMap = buildRowId(logExpressArr, tuple2._1, clsDefTabTup4); //构建rowId、parentId、childsubId
                                 List<String> allGlobDefs = new ArrayList<>(allGlobalNodeOfClass.get(className)); //得到类对应所有global定义
                                 Map<String, String> globMap = buildGlobal(logExpressArr, tuple2._1, allGlobDefs); //替换变量为真实值
-                                DataTable dataTable = classDefTabTuple4._4(); //得到数据表信息
+                                DataTable dataTable = clsDefTabTup4._4(); //得到数据表信息
                                 if (dataTable == null) {
                                     logger.warn("当前global:{}未匹配到datatable信息,不作处理", parse.getString("Glob"));
                                     //saveErrInfo(new ParseLogs(offset_key, offset_value, 1), new ParseLogDetails(
@@ -193,7 +194,6 @@ public class ParseCacheLogs {
         String globalAlias = paramArr[2];
         String className = paramArr[3];
         String nameSpace = paramArr[4];
-
         /**
          * ogg消息格式参数
          */
@@ -262,16 +262,8 @@ public class ParseCacheLogs {
             throw new RuntimeException(String.format("反查cache数据出错className:%s. %s.", className, e.getMessage()));
         }
 
-        //追加rowId、parentId、childsubId
-        for (Map.Entry<String, String> id : idsMap.entrySet()) {
-            afterBuilder.appendSchema(id.getKey(), DataType.VARCHAR, false, false);
-            afterRowDataValues.add(id.getValue());
-            beforeBuilder.appendSchema(id.getKey(), DataType.VARCHAR, false, false);
-            beforeRowDataValues.add(id.getValue());
-        }
-
-        afterBuilder.appendPayload(afterRowDataValues.toArray());
-        beforeBuilder.appendPayload(beforeRowDataValues.toArray());
+        //追加tableMeta差集字段, 追加rowId、parentId、childsubId
+        appendOtherColInfo(afterBuilder, beforeBuilder, afterRowDataValues, beforeRowDataValues, globManager, idsMap, tableName);
 
         //return parseMsg(afterBuilder.message, beforeBuilder.message);
         return parseOggMsg(afterBuilder.message, beforeBuilder.message, op_type, pos, op_ts, primary_keys);
@@ -291,7 +283,6 @@ public class ParseCacheLogs {
         String schemaName = paramArr[0];
         String tableName = paramArr[1];
         String nameSpace = paramArr[4];
-
         /**
          * ogg消息格式参数
          */
@@ -316,16 +307,8 @@ public class ParseCacheLogs {
         buildMSG(global, after, before, afterRowDataValues, beforeRowDataValues, afterBuilder,
                 beforeBuilder, nameSpace, tableName, globManager);//构建数据部分
 
-        //追加rowId、parentId、childsubId
-        for (Map.Entry<String, String> id : idsMap.entrySet()) {
-            afterBuilder.appendSchema(id.getKey(), DataType.VARCHAR, false, false);
-            afterRowDataValues.add(id.getValue());
-            beforeBuilder.appendSchema(id.getKey(), DataType.VARCHAR, false, false);
-            beforeRowDataValues.add(id.getValue());
-        }
-
-        afterBuilder.appendPayload(afterRowDataValues.toArray());
-        beforeBuilder.appendPayload(beforeRowDataValues.toArray());
+        //追加tableMeta差集字段,追加rowId、parentId、childsubId
+        appendOtherColInfo(afterBuilder, beforeBuilder, afterRowDataValues, beforeRowDataValues, globManager, idsMap, tableName);
 
         //return parseMsg(afterBuilder.message, beforeBuilder.message);
         return parseOggMsg(afterBuilder.message, beforeBuilder.message, op_type, pos, op_ts, primary_keys);
@@ -345,20 +328,18 @@ public class ParseCacheLogs {
         int beforeLength = before.size(); //before数据个长
 
         for (int i = 0; i < columanLength; i++) { //根据字段循环(value有可能少、漏)
-
-            ClassPropertyDefine classPropDef = fields.get(i); //当前属性信息
-
+            ClassPropertyDefine clsPropDef = fields.get(i); //当前属性信息
             //after处理
             if(i < afterLength) //有值则加载after对应数据
-                buidMsgNotEmpty(classPropDef, after, nameSpace, tableName, afterRowDataValues, afterBuilder, globManager);
+                buidMsgNotEmpty(clsPropDef, after, nameSpace, tableName, afterRowDataValues, afterBuilder, globManager);
             else  //否则默认给空值补上
-                buidMsgEmpty(classPropDef, tableName, afterRowDataValues, afterBuilder, globManager);
+                buidMsgEmpty(clsPropDef, tableName, afterRowDataValues, afterBuilder, globManager);
 
             //before处理
             if(i < beforeLength)  //有值则加载before对应数据
-                buidMsgNotEmpty(classPropDef, before, nameSpace, tableName, beforeRowDataValues, beforeBuilder, globManager);
+                buidMsgNotEmpty(clsPropDef, before, nameSpace, tableName, beforeRowDataValues, beforeBuilder, globManager);
             else  //否则默认给空值补上
-                buidMsgEmpty(classPropDef, tableName, beforeRowDataValues, beforeBuilder, globManager);
+                buidMsgEmpty(clsPropDef, tableName, beforeRowDataValues, beforeBuilder, globManager);
         }
     }
 
@@ -564,6 +545,43 @@ public class ParseCacheLogs {
                 }
             }
         return dataParses;
+    }
+
+
+    /**
+     * 追加tableMeta差集字段,追加rowId、parentId、childsubId
+     * @param afterBuilder
+     * @param beforeBuilder
+     * @param afterRowDataValues
+     * @param beforeRowDataValues
+     * @param globManager
+     * @param idsMap
+     * @param tableName
+     */
+    private static void appendOtherColInfo(MessageBuilder afterBuilder, MessageBuilder beforeBuilder, List<Object> afterRowDataValues,
+                                           List<Object> beforeRowDataValues, GlobalManager globManager, Map<String, String> idsMap, String tableName) {
+        //追加tableMeta多余字段
+        Map<String, TableMeta> allTableMeta = globManager.getAllTableMeta().get(tableName);
+        List<String> allSqlfield = afterBuilder.getMessage().getSchema().getFields().stream().map(f -> f.getName()).collect(Collectors.toList());
+        for(Map.Entry<String, TableMeta> meta : allTableMeta.entrySet()) {
+            if(!allSqlfield.contains(meta.getKey())){
+                afterBuilder.appendSchema(meta.getKey(), DataType.convertTypeCacheToHive(meta.getValue().getDataType()), false, false);
+                afterRowDataValues.add("null");
+                beforeBuilder.appendSchema(meta.getKey(), DataType.convertTypeCacheToHive(meta.getValue().getDataType()), false, false);
+                beforeRowDataValues.add("null");
+            }
+        }
+
+        //追加rowId、parentId、childsubId
+        for (Map.Entry<String, String> id : idsMap.entrySet()) {
+            afterBuilder.appendSchema(id.getKey(), DataType.convertTypeCacheToHive("varchar"), false, false);
+            afterRowDataValues.add(id.getValue());
+            beforeBuilder.appendSchema(id.getKey(), DataType.convertTypeCacheToHive("varchar"), false, false);
+            beforeRowDataValues.add(id.getValue());
+        }
+
+        afterBuilder.appendPayload(afterRowDataValues.toArray());
+        beforeBuilder.appendPayload(beforeRowDataValues.toArray());
     }
 
 

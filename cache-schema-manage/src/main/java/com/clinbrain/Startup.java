@@ -27,7 +27,6 @@ public class Startup {
     //TODO 加载所有dbName连接源
     //TODO 下标存入zookeeper
     //TODO 字段流存储测试
-    //TODO RowId逻辑
     static {
         try {
             // 加載properties文件
