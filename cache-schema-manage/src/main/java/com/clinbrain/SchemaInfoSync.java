@@ -157,7 +157,13 @@ public class SchemaInfoSync {
         }
     }
 
-    public void schemaInfoSync() {
+    public void schemaInfoSync(boolean syncClassDefine,
+                               boolean syncClassStorageDefine,
+                               boolean syncStorageSubscriptDefine,
+                               boolean syncClassPropertyDefine,
+                               boolean syncDataSchema,
+                               boolean syncDataTable,
+                               boolean syncTableMeta) {
         try {
             for (Map.Entry<String, SqlSession> sessionEntry : cacheSessions.entrySet()) {
                 String namespace = sessionEntry.getKey();
@@ -170,23 +176,13 @@ public class SchemaInfoSync {
                 Map<String, List<StorageSubscriptDefine>> allStorageSubscriptDefine = getAllStorageSubscriptDefine(dataSource);
                 logger.info("begin to sync class define.");
                 Map<String, ClassDefine> allClassDefine = getAllClassDefine(dataSource);
-                for (Map.Entry<String, ClassDefine> entry : allClassDefine.entrySet()) {
-                    classDefineMapper.insert(entry.getValue());
-                    mysqlSession.commit();
-                }
+                syncClassDefineInfo(syncClassDefine, allClassDefine);
 
                 logger.info("begin to sync class storage define.");
                 Map<String, List<ClassStorageDefine>> allClassStorageDefine = getAllClassStorageDefine(dataSource);
                 dealCacheStorage(allClassDefine, allClassStorageDefine, allStorageSubscriptDefine, dataSource);
-                for (Map.Entry<String, List<ClassStorageDefine>> entry : allClassStorageDefine.entrySet()) {
-                    entry.getValue().forEach(o -> classStorageDefineMapper.insert(o));
-                    mysqlSession.commit();
-                }
-
-                for (Map.Entry<String, List<StorageSubscriptDefine>> entry : allStorageSubscriptDefine.entrySet()) {
-                    entry.getValue().forEach(o -> storageSubscriptDefineMapper.insert(o));
-                    mysqlSession.commit();
-                }
+                syncClassStorageDefineInfo(syncClassStorageDefine, allClassStorageDefine);
+                syncStorageSubscriptDefineInfo(syncStorageSubscriptDefine, allStorageSubscriptDefine);
 
                 Map<String, ClassDefine> allClassDefineOfDsId = classDefineMapper.selectAllByDsId(dataSource.getId()).stream()
                         .collect(Collectors.toMap(ClassDefine::getClassName, classDefine -> classDefine));
@@ -194,11 +190,7 @@ public class SchemaInfoSync {
                 logger.info("begin to sync class property define.");
                 Map<String, List<ClassPropertyDefine>> allClassPropertyDefine = getAllClassPropertyDefine(dataSource,
                         allClassDefineOfDsId);
-                for (Map.Entry<String, List<ClassPropertyDefine>> entry : allClassPropertyDefine.entrySet()) {
-                    entry.getValue().forEach(o -> classPropertyDefineMapper.insert(o));
-                    mysqlSession.commit();
-                    mysqlSession.clearCache();
-                }
+                syncClassPropertyDefineInfo(syncClassPropertyDefine, allClassPropertyDefine);
 
                 Map<String, Set<String>> configTableInfos = allConfigTableInfo.get(namespace);
                 if (null != configTableInfos) {
@@ -206,9 +198,7 @@ public class SchemaInfoSync {
                     List<DataSchema> allDataSchema = getAllDataSchema(dataSource);
                     List<DataSchema> allConfigDataSchema = allDataSchema.stream()
                             .filter(o -> configTableInfos.containsKey(o.getSchemaName())).collect(Collectors.toList());
-
-                    allConfigDataSchema.forEach(o -> dataSchemaMapper.insert(o));
-                    mysqlSession.commit();
+                    syncDataSchemaInfo(syncDataSchema, allConfigDataSchema);
 
                     for (DataSchema dataSchema : allConfigDataSchema) {
                         Set<String> tableNames = configTableInfos.get(dataSchema.getSchemaName());
@@ -217,8 +207,7 @@ public class SchemaInfoSync {
                                 dataSchema.getSchemaName(), allClassDefineOfDsId);
                         List<DataTable> allConfigDataTable = allDataTableBySchema.stream()
                                 .filter(o -> tableNames.contains(o.getTableName())).collect(Collectors.toList());
-                        allConfigDataTable.forEach(o -> dataTableMapper.insert(o));
-                        mysqlSession.commit();
+                        syncDataTableInfo(syncDataTable, allConfigDataTable);
 
                         logger.info("begin to sync table meta with {}.", dataSchema.getSchemaName());
                         List<TableMeta> allTableMetaBySchema = getAllTableMetaBySchema(dataSource, dataSchema.getSchemaName());
@@ -259,10 +248,7 @@ public class SchemaInfoSync {
                             }
                         }
 
-                        for (Map.Entry<String, List<TableMeta>> entry : allConfigTableMeta.entrySet()) {
-                            entry.getValue().forEach(o -> tableMetaMapper.insert(o));
-                            mysqlSession.commit();
-                        }
+                        syncTableMetaInfo(syncTableMeta, allConfigTableMeta);
                     }
                 }
 
@@ -270,6 +256,69 @@ public class SchemaInfoSync {
             }
         } catch (Exception e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private void syncTableMetaInfo(boolean syncTableMeta, Map<String, List<TableMeta>> allConfigTableMeta) {
+        if (syncTableMeta) {
+            for (Map.Entry<String, List<TableMeta>> entry : allConfigTableMeta.entrySet()) {
+                entry.getValue().forEach(o -> tableMetaMapper.insert(o));
+                mysqlSession.commit();
+            }
+        }
+    }
+
+    private void syncDataTableInfo(boolean syncDataTable, List<DataTable> allConfigDataTable) {
+        if (syncDataTable) {
+            allConfigDataTable.forEach(o -> dataTableMapper.insert(o));
+            mysqlSession.commit();
+        }
+    }
+
+    private void syncDataSchemaInfo(boolean syncDataSchema, List<DataSchema> allConfigDataSchema) {
+        if (syncDataSchema) {
+            allConfigDataSchema.forEach(o -> dataSchemaMapper.insert(o));
+            mysqlSession.commit();
+        }
+    }
+
+    private void syncClassPropertyDefineInfo(boolean syncClassPropertyDefine,
+                                             Map<String, List<ClassPropertyDefine>> allClassPropertyDefine) {
+        if (syncClassPropertyDefine) {
+            for (Map.Entry<String, List<ClassPropertyDefine>> entry : allClassPropertyDefine.entrySet()) {
+                entry.getValue().forEach(o -> classPropertyDefineMapper.insert(o));
+                mysqlSession.commit();
+                mysqlSession.clearCache();
+            }
+        }
+    }
+
+    private void syncStorageSubscriptDefineInfo(boolean syncStorageSubscriptDefine,
+                                                Map<String, List<StorageSubscriptDefine>> allStorageSubscriptDefine) {
+        if (syncStorageSubscriptDefine) {
+            for (Map.Entry<String, List<StorageSubscriptDefine>> entry : allStorageSubscriptDefine.entrySet()) {
+                entry.getValue().forEach(o -> storageSubscriptDefineMapper.insert(o));
+                mysqlSession.commit();
+            }
+        }
+    }
+
+    private void syncClassStorageDefineInfo(boolean syncClassStorageDefine,
+                                            Map<String, List<ClassStorageDefine>> allClassStorageDefine) {
+        if (syncClassStorageDefine) {
+            for (Map.Entry<String, List<ClassStorageDefine>> entry : allClassStorageDefine.entrySet()) {
+                entry.getValue().forEach(o -> classStorageDefineMapper.insert(o));
+                mysqlSession.commit();
+            }
+        }
+    }
+
+    private void syncClassDefineInfo(boolean syncClassDefine, Map<String, ClassDefine> allClassDefine) {
+        if (syncClassDefine) {
+            for (Map.Entry<String, ClassDefine> entry : allClassDefine.entrySet()) {
+                classDefineMapper.insert(entry.getValue());
+                mysqlSession.commit();
+            }
         }
     }
 

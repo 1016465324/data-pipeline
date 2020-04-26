@@ -54,7 +54,8 @@ public class SchemaInfoSyncTest {
     @Test
     public void schemaInfoSyncTest() {
         SchemaInfoSync schemaInfoSync = new SchemaInfoSync(null);
-        schemaInfoSync.schemaInfoSync();
+        schemaInfoSync.schemaInfoSync(false, false, false,
+                false, true, true, true);
     }
 
     @Test
