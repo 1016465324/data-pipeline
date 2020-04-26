@@ -21,8 +21,13 @@ public class Startup {
     private static Properties pop = new Properties();
     private static ParseCacheLogs parseCacheLogs;
     private static CacheClient cacheClient = null;
+    private static CacheClient cacheDbNameClient = null;
     private static Map<String, String> offsetMap = new HashMap<>(); //下标偏移量记录
 
+    //TODO 加载所有dbName连接源
+    //TODO 下标存入zookeeper
+    //TODO 字段流存储测试
+    //TODO RowId逻辑
     static {
         try {
             // 加載properties文件
@@ -30,6 +35,9 @@ public class Startup {
             // 加载cacheClient
             cacheClient = new CacheClient(Startup.pop.getProperty("cache.url"), Startup.pop.getProperty("cache.username"),
                     Startup.pop.getProperty("cache.password"));
+            // 加载dbName连接源
+            cacheDbNameClient = new CacheClient(Startup.pop.getProperty("cache.glob.url"), Startup.pop.getProperty("cache.glob.username"),
+                    Startup.pop.getProperty("cache.glob.password"));
             parseCacheLogs = new ParseCacheLogs();
         } catch (Exception e) {
             e.printStackTrace();

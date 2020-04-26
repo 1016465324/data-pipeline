@@ -365,24 +365,21 @@ public class ParseCacheLogs {
 
     /**
      * 有值情况构建消息体
-     * @param classPropDef
+     * @param clsPropDef
      * @param valueArr
      * @param rowDataValues
      * @param builder
      */
-    private static void buidMsgNotEmpty(ClassPropertyDefine classPropDef, JSONArray valueArr, String nameSpace, String tableName,
+    private static void buidMsgNotEmpty(ClassPropertyDefine clsPropDef, JSONArray valueArr, String nameSpace, String tableName,
                                         List<Object> rowDataValues, MessageBuilder builder, GlobalManager globManager) throws Exception{
 
-        int storePiece = Integer.parseInt(classPropDef.getStoragePiece()) - 1; //属性下标, 按属性下标-1取数据值
-        String colName = classPropDef.getSqlFieldName(); //columnName
+        int storePiece = Integer.parseInt(clsPropDef.getStoragePiece()) - 1; //属性下标, 按属性下标-1取数据值
+        String colName = clsPropDef.getSqlFieldName(); //columnName
         String colType = "varchar"; //columnType 默认varchar
-//        String table_field = tableName + "_" + colName; //findTypeKey
-        String table_field = colName; //findTypeKey
-        Map<String, Map<String, TableMeta>> allTableMetas = globManager.getAllTableMeta();//allTableMetas
-        Map<String, TableMeta> allTableMeta = allTableMetas.get(tableName); //allTableMeta
+        Map<String, TableMeta> allTableMeta = globManager.getAllTableMeta().get(tableName); //allTableMeta
 
-        if(StringUtils.equalsIgnoreCase(classPropDef.getPropertyCollection(), "list")){ //属性为list类型则作list对应格式拼接
-            colType = allTableMeta.get(table_field).getDataType(); //columnType取自tableMeta
+        if(StringUtils.equalsIgnoreCase(clsPropDef.getPropertyCollection(), "list")){ //属性为list类型则作list对应格式拼接
+            colType = allTableMeta.get(colName).getDataType(); //columnType取自tableMeta
             if(valueArr.get(storePiece) instanceof String){
                 rowDataValues.add("null");
                 builder.appendSchema(colName, DataType.convertTypeCacheToHive(colType), false, false); //columnName
@@ -390,61 +387,46 @@ public class ParseCacheLogs {
                 JSONArray sub_ListArr = valueArr.getJSONArray(storePiece);
                 StringBuilder sb = new StringBuilder();
                 for (Object o : sub_ListArr) {
-                    if(StringUtils.isEmpty(classPropDef.getSqlListDelimiter()))
+                    if(StringUtils.isEmpty(clsPropDef.getSqlListDelimiter()))
                         sb.append(o).append(","); //list类型对应数据拼接默认分隔符为","
                     else
-                        sb.append(o).append(classPropDef.getSqlListDelimiter());
+                        sb.append(o).append(clsPropDef.getSqlListDelimiter());
                 }
                 String sub_ListValue = EncodeUtil.unicodeToString(sb.delete(sb.lastIndexOf(","), sb.length()).toString()); //转掉Unicode
                 rowDataValues.add(sub_ListValue);
                 builder.appendSchema(colName, DataType.convertTypeCacheToHive(colType), false, false); //columnName
             }
-        }else if(!StringUtils.startsWith(classPropDef.getRuntimeType(), "%")){ //属性为对象类型则找子属性
+        }else if(!StringUtils.startsWith(clsPropDef.getRuntimeType(), "%")){ //属性为对象类型则找子属性
             //根据对象属性找到其子属性
             Tuple4<ClassDefine, List<ClassStorageDefine>, List<ClassPropertyDefine>, DataTable> classDefDataTabTup4
-                    = globManager.getAllClassInfo().get(classPropDef.getRuntimeType());
+                    = globManager.getAllClassInfo().get(clsPropDef.getRuntimeType());
             if(StringUtils.equals(classDefDataTabTup4._1().getClassType(), "serial")){ //序列华类型, 需展开,字段拼接
                 List<ClassPropertyDefine> subSeriClassPropDef = classDefDataTabTup4._3(); //类对应属性
                 String sub_colName;
-                String sub_colType;
-                String sub_colValue;
                 JSONArray subSeriJsonArr = valueArr.getJSONArray(storePiece); //属性类对应数据
                 for (int j = 0; j < subSeriClassPropDef.size(); j++) { //属性对象赋值
                     if(StringUtils.startsWith(subSeriClassPropDef.get(j).getPropertyName(), "%") &&
                             StringUtils.isEmpty(subSeriClassPropDef.get(j).getStoragePiece())){
                         continue;
                     }
-                    String sub_clsPopColType = subSeriClassPropDef.get(j).getRuntimeType(); //取自classProperty
-                    int sub_storePiece = Integer.parseInt(subSeriClassPropDef.get(j).getStoragePiece()) - 1; //属性类子属性下标
-                    sub_colName = String.format("%s_%s", colName, subSeriClassPropDef.get(j).getSqlFieldName());
-                    sub_colType = allTableMeta.get(String.format("%s_%s", table_field, subSeriClassPropDef.get(j).getSqlFieldName())).getDataType();
-                    sub_colValue = EncodeUtil.unicodeToString(subSeriJsonArr.getString(sub_storePiece)); //转掉unicode
+                    ClassPropertyDefine subClsPropDef = subSeriClassPropDef.get(j);
+                    sub_colName = String.format("%s_%s", colName, subClsPropDef.getSqlFieldName());
+                    Map<String, String> sub_colInfo = evaluationValue(subClsPropDef, sub_colName, subSeriJsonArr, allTableMeta); //获字段取值、类型
 
-                    String value = "";
-                    if(StringUtils.equalsIgnoreCase(sub_clsPopColType, "%Library.Date")) {
-                        value = converValueTimeOrDate(value, "date");
-                        colType = "Date";
-                    }else if(StringUtils.equalsIgnoreCase(sub_clsPopColType, "%Library.Time")) {
-                        value = converValueTimeOrDate(value, "time");
-                        colType = "Time";
-                    }else {
-                        value = sub_colValue;
-                    }
-
-                    rowDataValues.add(value);
-                    builder.appendSchema(sub_colName, DataType.convertTypeCacheToHive(colType), false, false); //columnName
+                    rowDataValues.add(sub_colInfo.get("sub_colValue"));
+                    builder.appendSchema(sub_colName, DataType.convertTypeCacheToHive(sub_colInfo.get("sub_colType")), false, false); //columnName
                 }
             }else { //持久类型
                 String colvalue = EncodeUtil.unicodeToString(valueArr.getString(storePiece)); //转掉unicode
                 rowDataValues.add(colvalue);
                 builder.appendSchema(colName, DataType.convertTypeCacheToHive(colType), false, false); //columnName
             }
-        }else if(StringUtils.equals(classPropDef.getRuntimeType(), "%Library.GlobalCharacterStream") ||
-            StringUtils.equals(classPropDef.getRuntimeType(), "%Library.GlobalBinaryStream")){ //流存储格式
+        }else if(StringUtils.equals(clsPropDef.getRuntimeType(), "%Library.GlobalCharacterStream") ||
+            StringUtils.equals(clsPropDef.getRuntimeType(), "%Library.GlobalBinaryStream")){ //字段流存储格式
             String colValueAddr = valueArr.getString(storePiece); //存储global地址
             List<String> queryGlobs = new ArrayList<>();
             queryGlobs.add(colValueAddr);
-            List<JSONObject> QueryJsonObjList = getLogsByQuery(nameSpace, classPropDef.getClassName(), queryGlobs); //查找对应数据
+            List<JSONObject> QueryJsonObjList = getLogsByQuery(nameSpace, clsPropDef.getClassName(), queryGlobs); //查找对应数据
             if(QueryJsonObjList.size() > 0){
                 JSONObject jsonObject = QueryJsonObjList.get(0);
                 String colvalue = EncodeUtil.unicodeToString(jsonObject.getJSONArray("globalValue").getString(0)); //流值
@@ -453,26 +435,10 @@ public class ParseCacheLogs {
                 rowDataValues.add("null");
             }
             builder.appendSchema(colName, DataType.convertTypeCacheToHive(colType), false, false);
-
         }else { //一般属性
-
-            colType = allTableMeta.get(table_field).getDataType(); //columnType取自tableMeta
-            String value = EncodeUtil.unicodeToString(valueArr.getString(storePiece)); //转掉unicode
-            String clsPopColType = classPropDef.getRuntimeType(); //取自classProperty
-
-            String colvalue = "";
-            if(StringUtils.equalsIgnoreCase(clsPopColType, "%Library.Date")) {
-                colvalue = converValueTimeOrDate(value, "date");
-                colType = "Date";
-            }else if(StringUtils.equalsIgnoreCase(clsPopColType, "%Library.Time")) {
-                colvalue = converValueTimeOrDate(value, "time");
-                colType = "Time";
-            }else {
-                colvalue = value;
-            }
-
-            rowDataValues.add(colvalue); //columnValue
-            builder.appendSchema(colName, DataType.convertTypeCacheToHive(colType), false, false); //columnName
+            Map<String, String> colInfo = evaluationValue(clsPropDef, colName, valueArr, allTableMeta); //获字段取值、类型
+            rowDataValues.add(colInfo.get("colvalue")); //columnValue
+            builder.appendSchema(colName, DataType.convertTypeCacheToHive(colInfo.get("colType")), false, false); //columnName
         }
     }
 
@@ -737,6 +703,41 @@ public class ParseCacheLogs {
             }
         }
         return idMap;
+    }
+
+
+    /**
+     * 字段取值
+     * @param subClsPropDef
+     * @param sub_colName
+     * @param subSeriJsonArr
+     * @param allTableMeta
+     * @return
+     */
+    private static Map<String, String> evaluationValue(ClassPropertyDefine subClsPropDef, String sub_colName, JSONArray subSeriJsonArr,
+                                                       Map<String, TableMeta> allTableMeta) {
+        String sub_colType;
+        String sub_colValue = "";
+        String value;
+        Map<String, String> colInfo = new HashMap<>();
+        String sub_clsPopColType = subClsPropDef.getRuntimeType(); //取自classProperty
+        int sub_storePiece = Integer.parseInt(subClsPropDef.getStoragePiece()) - 1; //属性类子属性下标
+        sub_colType = allTableMeta.get(sub_colName).getDataType();
+        value = EncodeUtil.unicodeToString(subSeriJsonArr.getString(sub_storePiece)); //转掉unicode
+
+        if(StringUtils.equalsIgnoreCase(sub_clsPopColType, "%Library.Date")) {
+            sub_colValue = converValueTimeOrDate(value, "date");
+            sub_colType = "Date";
+        }else if(StringUtils.equalsIgnoreCase(sub_clsPopColType, "%Library.Time")) {
+            sub_colValue = converValueTimeOrDate(value, "time");
+            sub_colType = "Time";
+        }else {
+            sub_colValue = value;
+        }
+
+        colInfo.put("sub_colType", sub_colType);
+        colInfo.put("sub_colValue", sub_colValue);
+        return colInfo;
     }
 
 
