@@ -111,9 +111,9 @@ public class ParseCacheLogs {
                             break;
 
                         GlobalManager globManager = allGlobalManager.get(nameSpace); //根据dbName获取相应配置加载类
-                        if (globManager == null) {
+                        if (globManager == null)
                             throw new ConfigLoadException(ErrorInfo.getErrDesc(ErrorInfo.GLOBMANAGER_NOTFOUND));
-                        }
+
                         Map<String, List<Tuple2<List<StorageSubscriptDefine>, List<ClassPropertyDefine>>>> allGlobalNodeStorage = globManager.getAllGlobalNodeStorage();
                         Map<String, Set<String>> allGlobalNodeOfClass = globManager.getAllGlobalNodeOfClass();
                         Map<String, Tuple4<ClassDefine, List<ClassStorageDefine>, List<ClassPropertyDefine>, DataTable>> allClassInfo = globManager.getAllClassInfo();
@@ -394,8 +394,8 @@ public class ParseCacheLogs {
                     sub_colName = String.format("%s_%s", colName, subClsPropDef.getSqlFieldName());
                     Map<String, String> sub_colInfo = evaluationValue(subClsPropDef, sub_colName, subSeriJsonArr, allTableMeta); //获字段取值、类型
 
-                    rowDataValues.add(sub_colInfo.get("sub_colValue"));
-                    builder.appendSchema(sub_colName, DataType.convertTypeCacheToHive(sub_colInfo.get("sub_colType")), false, false); //columnName
+                    rowDataValues.add(sub_colInfo.get("colValue"));
+                    builder.appendSchema(sub_colName, DataType.convertTypeCacheToHive(sub_colInfo.get("colType")), false, false); //columnName
                 }
             }else { //持久类型
                 String colvalue = EncodeUtil.unicodeToString(valueArr.getString(storePiece)); //转掉unicode
@@ -418,7 +418,7 @@ public class ParseCacheLogs {
             builder.appendSchema(colName, DataType.convertTypeCacheToHive(colType), false, false);
         }else { //一般属性
             Map<String, String> colInfo = evaluationValue(clsPropDef, colName, valueArr, allTableMeta); //获字段取值、类型
-            rowDataValues.add(colInfo.get("colvalue")); //columnValue
+            rowDataValues.add(colInfo.get("colValue")); //columnValue
             builder.appendSchema(colName, DataType.convertTypeCacheToHive(colInfo.get("colType")), false, false); //columnName
         }
     }
@@ -571,7 +571,6 @@ public class ParseCacheLogs {
                 beforeRowDataValues.add("null");
             }
         }
-
         //追加rowId、parentId、childsubId
         for (Map.Entry<String, String> id : idsMap.entrySet()) {
             afterBuilder.appendSchema(id.getKey(), DataType.convertTypeCacheToHive("varchar"), false, false);
@@ -753,8 +752,8 @@ public class ParseCacheLogs {
             sub_colValue = value;
         }
 
-        colInfo.put("sub_colType", sub_colType);
-        colInfo.put("sub_colValue", sub_colValue);
+        colInfo.put("colType", sub_colType);
+        colInfo.put("colValue", sub_colValue);
         return colInfo;
     }
 
@@ -857,7 +856,6 @@ public class ParseCacheLogs {
         for (StorageSubscriptDefine subscriptDefine : subscriptDefines) {
                 sb.append(subscriptDefine.getExpression()).append(",");
         }
-        //throw new NullPointerException("空指针啦。。。。");
         //throw new IllegalAccessException("参数错误！");
         return  sb.toString().substring(0, sb.toString().lastIndexOf(",")) + ")";
     }
@@ -889,8 +887,8 @@ public class ParseCacheLogs {
      */
     public static void main(String[] args) throws Exception{
         List<String> global = new ArrayList<>();
-//        global.add("^DHCEMRI.InstanceDataS(11,1)");
-        global.add("^DHCEMRI.InstanceDataS(3,1)");
+        //global.add("^DHCEMRI.InstanceDataS(11,1)");
+        global.add("^DHCEMRI.InstanceDataS(3,1)"); //字段流存储格式
         getLogsByQuery("DHC-APP", "User.PACEmployeeType", global);
     }
 

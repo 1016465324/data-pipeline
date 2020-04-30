@@ -18,7 +18,7 @@ public class CacheSchemaManage {
             return;
         }
 
-        new SchemaInfoSync(path).schemaInfoSync();
+//        new SchemaInfoSync(path).schemaInfoSync();
     }
 
 }

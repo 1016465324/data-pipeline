@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.text.SimpleDateFormat;
 import java.util.*;
 
 /**
@@ -35,8 +36,8 @@ public class Startup {
             cacheClient = new CacheClient(Startup.pop.getProperty("cache.url"), Startup.pop.getProperty("cache.username"),
                     Startup.pop.getProperty("cache.password"));
             // 加载dbName连接源
-            cacheDbNameClient = new CacheClient(Startup.pop.getProperty("cache.glob.url"), Startup.pop.getProperty("cache.glob.username"),
-                    Startup.pop.getProperty("cache.glob.password"));
+            //cacheDbNameClient = new CacheClient(Startup.pop.getProperty("cache.glob.url"), Startup.pop.getProperty("cache.glob.username"),
+            //        Startup.pop.getProperty("cache.glob.password"));
             parseCacheLogs = new ParseCacheLogs();
         } catch (Exception e) {
             e.printStackTrace();
@@ -48,36 +49,55 @@ public class Startup {
      * 模拟启动
      * @param args
      */
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception{
         Startup startup = new Startup();
-        startup.StartParse(startup);
+        Map<String, String> params = queryInitParams();
+        String initDate = params.get("initDate");
+        String initRange = params.get("initRange");
+        int step = Integer.parseInt(pop.getProperty("cache.log.readStep"));
+        ResultSet rs = null;
+        while (true){
+            //1.查取数据
+            rs = getResultLogs(initDate, initRange);
+            if(rs == null){ //未获取到日志
+                if(isLessThanNow(initDate)){ //小于当前日期
+                    initDate = addOneDate(initDate); //时间加一天
+                    initRange = params.get("initRange"); //范围重置
+                    continue;
+                }else {
+                    Thread.sleep(3000); //当前日期查询不到,等待5秒重试
+                }
+            }else { //获取到日志
+                //执行
+                startup.run(rs);
+                initRange = addOneStep(initRange, step); //范围右偏移
+            }
+        }
     }
 
 
     /**
      * 启动接口
      */
-    private void StartParse(Startup startup){
+    private void run(ResultSet rs){
 
         String logData = "";
         String messages = "";
         String offset_key = ""; //namespace + dbname
         String offset_value = ""; //处理日期 + 批处理当前下标
         String errMsg = "";
-        ResultSet rs = null;
+
         int batch_index = 0;
         long Tstart = System.currentTimeMillis();
         List<String> resMessages = new ArrayList<>(); //返回消息体
         try {
-            //1.查取数据
-            rs = getResultLogs();
             //2.解析开始
             while (rs.next()){
                 System.out.println(batch_index);
                 offset_value = String.format("%s_%s", pop.getProperty("cache.logs.dealWithTime"), batch_index);
                 batch_index++;
                 logData = rs.getString(2);
-                String[] resultArr  = parseCacheLogs.startDealWithLogs(logData);
+                String[] resultArr = parseCacheLogs.startDealWithLogs(logData);
                 offset_key = resultArr[0];
                 messages = resultArr[1];
                 if(StringUtils.isNotEmpty(offset_key)) {
@@ -92,15 +112,71 @@ public class Startup {
                 String s = JSON.parseObject(res).toJSONString();
                 System.out.println(s);
             });
-
         }catch (Exception e){
             errMsg = e.getMessage();
             logger.error("实时数据还原过程出错 {}: {}.", e.getMessage(), logData);
             //offsetMap.put(offset_key, offset_value); //批处理下标记录
             //throw new RuntimeException(String.format("%s: %s", e.getMessage(), logData));
         } finally {
-            startup.addShutdownHook(offsetMap, errMsg); //钩子函数
+            //startup.addShutdownHook(offsetMap, errMsg); //钩子函数
         }
+    }
+
+
+    /**
+     * 判断是否为当前日期
+     * @param initDate
+     * @return
+     */
+    private static boolean isLessThanNow(String initDate) throws Exception{
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyMMdd");
+        Date now = sdf.parse(sdf.format(new Date()));
+        Date bfDate = sdf.parse(initDate);
+        return bfDate.before(now);
+    }
+
+
+    /**
+     * TODO 读取初始值查询初始化参数
+     * @return
+     */
+    private static Map<String, String> queryInitParams() {
+        Map<String, String> param = new HashMap<>();
+        String initDate = "20200428";
+        String initRange = "1:10000";
+        param.put("initDate", initDate);
+        param.put("initRange", initRange);
+        return param;
+    }
+
+
+    /**
+     * 日志下标偏移
+     * @param initRange
+     * @param readStep
+     * @return
+     */
+    private static String addOneStep(String initRange, int readStep) {
+        String[] rangeArr = StringUtils.split(initRange, ":");
+        int startRg = Integer.parseInt(rangeArr[0]) + readStep;
+        int endRg = Integer.parseInt(rangeArr[1]) + readStep;
+        return String.format("%s:%s", startRg, endRg);
+    }
+
+
+    /**
+     * 时间偏移
+     * @param initDate
+     * @return
+     */
+    private static String addOneDate(String initDate) throws Exception{
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
+        Calendar calendar = new GregorianCalendar();
+        Date date = sdf.parse(initDate);
+        calendar.setTime(date);
+        calendar.add(Calendar.DATE, 1);
+        String now = sdf.format(calendar.getTime());
+        return now;
     }
 
 
@@ -125,11 +201,11 @@ public class Startup {
      * @return
      * @throws Exception
      */
-    private static ResultSet getResultLogs() throws SQLException{
+    private static ResultSet getResultLogs(String initDate, String initRange) throws SQLException{
         String dbName = pop.getProperty("cache.logs.database");
-        String startTime = pop.getProperty("cache.logs.dealWithTime");
-        String batchSize = pop.getProperty("cache.logs.batchSize");
-        return cacheClient.executeQuery(String.format(Constans.query_logs_sql, dbName, startTime, batchSize));
+        //String startTime = pop.getProperty("cache.logs.dealWithTime");
+        //String batchSize = pop.getProperty("cache.logs.batchSize");
+        return cacheClient.executeQuery(String.format(Constans.query_logs_sql, dbName, initDate, initRange));
     }
 
 

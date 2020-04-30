@@ -8,16 +8,16 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
-public class ZKUtils implements Watcher {
+public class NativeZKUtils implements Watcher {
 
-    private static final Logger logger = LoggerFactory.getLogger(ZKUtils.class);
+    private static final Logger logger = LoggerFactory.getLogger(NativeZKUtils.class);
     private static CountDownLatch downLatch = new CountDownLatch(1);
     private static ZooKeeper zk;
 
-    private ZKUtils(){}
+    private NativeZKUtils(){}
 
     public static void initZK(String zkServerAddr) throws Exception{
-        zk = new ZooKeeper(zkServerAddr,5000, new ZKUtils());
+        zk = new ZooKeeper(zkServerAddr,5000, new NativeZKUtils());
     }
 
 
