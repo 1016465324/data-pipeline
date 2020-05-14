@@ -677,10 +677,12 @@ public class ParseCacheLogs {
         ClassStorageDefine classStogeDef = classDefTabTuple4._2().get(0);
         List<ClassPropertyDefine> classPopDef = classDefTabTuple4._3();
 
+        int rowIdCount = 0;
         StringBuilder sb = new StringBuilder();
         Map<String, String> idMap = new HashMap<>();
         for (int i = 0; i < logExpressArr.length; i++) {
             if(storageSubscriptDefines.get(i).getIsRowid() == 1){
+                rowIdCount++;
                 sb.append(logExpressArr[ i]).append("||");
             }
         }
@@ -702,39 +704,41 @@ public class ParseCacheLogs {
                 }
             }
         }else { //sql存储
-            boolean isGetParent = false;
-            for (ClassPropertyDefine classPropDef : classPopDef) {
-                if(StringUtils.isNotEmpty(classPropDef.getPropertyCardinality()) &&
-                        StringUtils.equalsIgnoreCase("parent", classPropDef.getPropertyCardinality())){
-                    parentId = rowId.substring(0, rowId.lastIndexOf("||"));
-                    idMap.put(classPropDef.getSqlFieldName(), parentId); //parentId
-                    isGetParent = true;
-                    break;
-                }
-            }
-
-            if (!isGetParent) {
-                for (StorageSubscriptDefine storageSubscriptDefine : storageSubscriptDefines) {
-                    if (storageSubscriptDefine.getIsRowid() == 1) {
+            if (rowIdCount > 1) {
+                boolean isGetParent = false;
+                for (ClassPropertyDefine classPropDef : classPopDef) {
+                    if(StringUtils.isNotEmpty(classPropDef.getPropertyCardinality()) &&
+                            StringUtils.equalsIgnoreCase("parent", classPropDef.getPropertyCardinality())){
                         parentId = rowId.substring(0, rowId.lastIndexOf("||"));
-                        idMap.put(storageSubscriptDefine.getExpression()
-                                        .replace("{", "")
-                                        .replace("}", ""),
-                                parentId); //parentId
+                        idMap.put(classPropDef.getSqlFieldName(), parentId); //parentId
+                        isGetParent = true;
                         break;
                     }
                 }
-            }
 
-            for (int i = storageSubscriptDefines.size() - 1; i >= 0; i--) {
-                StorageSubscriptDefine storageSubscriptDefine = storageSubscriptDefines.get(i);
-                if (storageSubscriptDefine.getIsRowid() == 1) {
-                    childsubId = rowId.substring(rowId.lastIndexOf("||") + 2);
-                    idMap.put(storageSubscriptDefine.getExpression()
-                                    .replace("{", "")
-                                    .replace("}", ""),
-                            childsubId); //childsub
-                    break;
+                if (!isGetParent) {
+                    for (StorageSubscriptDefine storageSubscriptDefine : storageSubscriptDefines) {
+                        if (storageSubscriptDefine.getIsRowid() == 1) {
+                            parentId = rowId.substring(0, rowId.lastIndexOf("||"));
+                            idMap.put(storageSubscriptDefine.getExpression()
+                                            .replace("{", "")
+                                            .replace("}", ""),
+                                    parentId); //parentId
+                            break;
+                        }
+                    }
+                }
+
+                for (int i = storageSubscriptDefines.size() - 1; i >= 0; i--) {
+                    StorageSubscriptDefine storageSubscriptDefine = storageSubscriptDefines.get(i);
+                    if (storageSubscriptDefine.getIsRowid() == 1) {
+                        childsubId = rowId.substring(rowId.lastIndexOf("||") + 2);
+                        idMap.put(storageSubscriptDefine.getExpression()
+                                        .replace("{", "")
+                                        .replace("}", ""),
+                                childsubId); //childsub
+                        break;
+                    }
                 }
             }
         }
