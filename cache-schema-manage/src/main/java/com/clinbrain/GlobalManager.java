@@ -185,11 +185,11 @@ public class GlobalManager {
         Map<String, ClassStorageDefine> allClassStorageDefine = classStorageDefineList
                 .stream().collect(Collectors.toMap(ClassStorageDefine::getStorageName, o -> o));
 
-        List<ClassPropertyDefine> classPropertyDefineList = classPropertyDefineMapper.selectAllByDsId(dataSource.getId());
-        Map<String, List<ClassPropertyDefine>> allClassPropertyDefine = classPropertyDefineList.stream()
+        Map<String, List<ClassPropertyDefine>> allClassPropertyDefine = classPropertyDefineMapper
+                .selectAllByDsIdAndStorageName(dataSource.getId()).stream()
                 .collect(Collectors.groupingBy(ClassPropertyDefine::getStorageName));
 
-        buildAllClassInfo(classStorageDefineList, classPropertyDefineList);
+        buildAllClassInfo(classStorageDefineList);
 
         for (Map.Entry<String, List<StorageSubscriptDefine>> entry : allStorageSubscriptDefine.entrySet()) {
             String storageName = entry.getKey();
@@ -275,8 +275,7 @@ public class GlobalManager {
         }
     }
 
-    private void buildAllClassInfo(List<ClassStorageDefine> classStorageDefineList,
-                                   List<ClassPropertyDefine> classPropertyDefineList) {
+    private void buildAllClassInfo(List<ClassStorageDefine> classStorageDefineList) {
         Map<String, List<ClassStorageDefine>> allClassStorageDefineOfClass = classStorageDefineList
                 .stream().collect(Collectors.groupingBy(ClassStorageDefine::getClassName));
         List<DataTable> dataTables = dataTableMapper.selectAllByDsId(dataSource.getId());
@@ -284,7 +283,8 @@ public class GlobalManager {
                 .collect(Collectors.toMap(DataTable::getClassName, o -> o));
         Map<String, ClassDefine> allClassDefine = classDefineMapper.selectAllByDsId(dataSource.getId()).stream()
                 .collect(Collectors.toMap(ClassDefine::getClassName, o -> o));
-        Map<String, List<ClassPropertyDefine>> allPropertyDefineOfClass = classPropertyDefineList.stream()
+        Map<String, List<ClassPropertyDefine>> allPropertyDefineOfClass = classPropertyDefineMapper
+                .selectAllByDsId(dataSource.getId()).stream()
                 .collect(Collectors.groupingBy(ClassPropertyDefine::getClassName));
 
         buildAllTableMeta(dataTables);

@@ -303,6 +303,14 @@
     <include refid="Base_Column_List" />
     from t_class_property_define
     where left(property_name, 1) != '%'
+    and ds_id = #{dsId,jdbcType=INTEGER}
+  </select>
+
+  <select id="selectAllByDsIdAndStorageName" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List" />
+    from t_class_property_define
+    where left(property_name, 1) != '%'
     and storage_name is not null
     and ds_id = #{dsId,jdbcType=INTEGER}
   </select>
