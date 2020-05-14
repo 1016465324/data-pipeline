@@ -702,6 +702,7 @@ public class ParseCacheLogs {
                 }
             }
         }else { //sql存储
+            boolean isGetParent = false, isGetChild = false;
             for (ClassPropertyDefine classPropDef : classPopDef) {
                 if(StringUtils.isEmpty(classPropDef.getPropertyCardinality())){
                     if(StringUtils.isEmpty(classPropDef.getStorageName()) &&
@@ -710,11 +711,41 @@ public class ParseCacheLogs {
                             classPropDef.getPropertyName().toLowerCase().contains("childsub")){
                         childsubId = rowId.substring(rowId.lastIndexOf("||") + 2);
                         idMap.put(classPropDef.getSqlFieldName(), childsubId); //childsub
+                        isGetChild = true;
                     }else {
                         if(StringUtils.equalsIgnoreCase("parent", classPropDef.getPropertyCardinality())){
                             parentId = rowId.substring(0, rowId.lastIndexOf("||"));
                             idMap.put(classPropDef.getSqlFieldName(), parentId); //parentId
+                            isGetParent = true;
                         }
+                    }
+                }
+            }
+
+            if (!isGetParent) {
+                for (int i = 0; i < storageSubscriptDefines.size(); i++) {
+                    StorageSubscriptDefine storageSubscriptDefine = storageSubscriptDefines.get(i);
+                    if (storageSubscriptDefine.getIsRowid() == 1) {
+                        parentId = rowId.substring(0, rowId.lastIndexOf("||"));
+                        idMap.put(storageSubscriptDefine.getExpression()
+                                        .replace("{", "")
+                                        .replace("}", ""),
+                                parentId); //parentId
+                        break;
+                    }
+                }
+            }
+
+            if (!isGetChild) {
+                for (int i = storageSubscriptDefines.size() - 1; i >= 0; i--) {
+                    StorageSubscriptDefine storageSubscriptDefine = storageSubscriptDefines.get(i);
+                    if (storageSubscriptDefine.getIsRowid() == 1) {
+                        childsubId = rowId.substring(rowId.lastIndexOf("||") + 2);
+                        idMap.put(storageSubscriptDefine.getExpression()
+                                        .replace("{", "")
+                                        .replace("}", ""),
+                                childsubId); //childsub
+                        break;
                     }
                 }
             }
