@@ -5,7 +5,11 @@ import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
-import com.clinbrain.database.*;
+import com.clinbrain.database.CachedbClient;
+import com.clinbrain.database.CachedbMetadata;
+import com.clinbrain.database.CachedbRecord;
+import com.clinbrain.database.IDatabaseClient;
+import com.clinbrain.database.TableMeta;
 import com.clinbrain.global.CacheGlobalConfig;
 import com.clinbrain.global.ConfigIndex;
 import com.clinbrain.source.cache.CDCGlobalLog;
@@ -22,10 +26,32 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.*;
+import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.IOException;
 import java.lang.reflect.Method;
-import java.sql.*;
-import java.util.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 
 public class CachedbSourceTest {
 
@@ -58,7 +84,7 @@ public class CachedbSourceTest {
 
     @Test
     public void testConnection() {
-        String url="jdbc:Cache://localhost:1972/%SYS";
+        String url="jdbc:Cache://192.168.0.242:1972/%SYS";
         String username="_SYSTEM";
         String password="sys";
         try {
@@ -66,7 +92,17 @@ public class CachedbSourceTest {
             Class.forName(driverName);
             Connection conn = DriverManager.getConnection(url, username, password);
             Statement statement = conn.createStatement();
-            ResultSet resultSet = statement.executeQuery("");
+//            statement.setFetchSize(10000);
+            System.out.println(new Date());
+            long begin = System.currentTimeMillis();
+            String address = null;
+            ResultSet resultSet = statement.executeQuery("select address,after,before from ClinBrain.JournalTail_RecordList(\"c:\\journal\\journal\\MIRROR-CDC-20200503.001\")");
+            while (resultSet.next()) {
+                address = resultSet.getString("address");
+//                System.out.println(address);
+            }
+            System.out.println(address);
+            System.out.println(System.currentTimeMillis() - begin);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -387,6 +423,33 @@ public class CachedbSourceTest {
         for (String tmp : t) {
             System.out.println(tmp);
         }
+
+        long time = System.currentTimeMillis() / 1000;
+        System.out.println(time);
+        Date date = Date.from(Instant.now());
+        LocalDateTime localDateTime = LocalDateTime.ofInstant(Instant.ofEpochSecond(time), ZoneId.systemDefault());
+        System.out.println(localDateTime.getNano());
+        String format = String.format("%04d-%02d-%02dT%02d:%02d:%02d.%03d%03d",
+                localDateTime.getYear(), localDateTime.getMonthValue(), localDateTime.getDayOfMonth(),
+                localDateTime.getHour(), localDateTime.getMinute(), localDateTime.getSecond(),
+                0, 100);
+        System.out.println(format);
+        String jsonStr1 = "{\"test\":\"haha\"}";
+        JSONObject jsonObject1 = JSONObject.parseObject(jsonStr1);
+
+        String jsonStr2 = "{\"test\":\"haha\"}";
+        JSONObject jsonObject2 = JSONObject.parseObject(jsonStr1);
+
+        String s1 = jsonObject1.getString("test");
+        String s2 = jsonObject2.getString("test");
+        String s3 = jsonObject1.getString("test");
+
+        HashMap<String, String> map = new HashMap<>();
+        map.put(s1, "111");
+        map.put(s2, "222");
+        map.put(s3, "333");
+
+        System.out.println(map.size());
     }
 
 
