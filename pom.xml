@@ -15,6 +15,7 @@
         <module>data-sync</module>
         <module>cache-schema-manage</module>
         <module>db-flink-sync</module>
+        <module>hudi-import</module>
         <module>packaging</module>
     </modules>
 
