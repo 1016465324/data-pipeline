@@ -42,8 +42,8 @@ object CommandUtil {
             new PumpStreamHandler(out)
         }
 
-        // 设置超时时间为10秒
-        val watchdog = new ExecuteWatchdog(10000)
+        // 设置超时时间为5分钟
+        val watchdog = new ExecuteWatchdog(5 * 60 * 1000)
         val executor = new DefaultExecutor
         executor.setStreamHandler(pumpStreamHandler)
         executor.setWatchdog(watchdog)

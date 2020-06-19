@@ -4,7 +4,7 @@
         "http://mybatis.org/dtd/mybatis-generator-config_1_0.dtd">
 <generatorConfiguration>
     <!-- 数据库驱动 -->
-    <classPathEntry location="C:\Users\gg\.m2\repository\mysql\mysql-connector-java\5.1.47\mysql-connector-java-5.1.47.jar"/>
+    <classPathEntry location="C:\xhy\mvn_repository\mysql\mysql-connector-java\5.1.47\mysql-connector-java-5.1.47.jar"/>
     <context id="DB2Tables"  targetRuntime="MyBatis3">
         <commentGenerator>
             <!--如果生成日期,会造成即便修改一个字段,整个实体所有属性都发生变化,不利于版 E制,所以设置为true -->
@@ -14,27 +14,27 @@
         </commentGenerator>
         <!--数据库链接URL，用户名、密码 -->
         <jdbcConnection driverClass="com.mysql.jdbc.Driver"
-                        connectionURL="jdbc:mysql://192.168.0.240:3306/datahub?useSSL=false"
-                        userId="root" password="root">
+                        connectionURL="jdbc:mysql://10.239.1.71:3306/clb_dip_metadata?useSSL=false"
+                        userId="root" password="P@ssw0rd">
         </jdbcConnection>
         <javaTypeResolver>
             <!-- 是否使用bigDecimal， false可自动转化以下类型（Long, Integer, Short, etc.） -->
             <property name="forceBigDecimals" value="false"/>
         </javaTypeResolver>
         <!-- 生成实体类地址 -->
-        <javaModelGenerator targetPackage="com.clinbrain.model" targetProject="D:\workspace\data-pipeline\cache-schema-manage\src\main\java\">
+        <javaModelGenerator targetPackage="com.clinbrain.model" targetProject="C:\xhy\workspace\data-pipeline\cache-schema-manage\src\main\java\">
             <!-- 是否在当前路径下新加一层schema,eg：fase路径com.packetXXX.model， true:com.packetXXX.model.[schemaName] -->
             <property name="enableSubPackages" value="true"/>
             <!-- 是否针对string类型的字段在set的时候进行trim调用 -->
             <property name="trimStrings" value="true"/>
         </javaModelGenerator>
         <!-- 生成mapxml文件 -->
-        <sqlMapGenerator targetPackage="mysql" targetProject="D:\workspace\data-pipeline\cache-schema-manage\src\main\resources\mappers\">
+        <sqlMapGenerator targetPackage="mysql" targetProject="C:\xhy\workspace\data-pipeline\cache-schema-manage\src\main\resources\mappers\">
             <!-- 是否在当前路径下新加一层schema,eg：fase路径mapper， true:mapper.[schemaName] -->
             <property name="enableSubPackages" value="true"/>
         </sqlMapGenerator>
         <!-- 生成mapxml对应client，也就是接口dao -->
-        <javaClientGenerator type="XMLMAPPER" targetPackage="com.clinbrain.mapper" targetProject="D:\workspace\data-pipeline\cache-schema-manage\src\main\java\">
+        <javaClientGenerator type="XMLMAPPER" targetPackage="com.clinbrain.mapper" targetProject="C:\xhy\workspace\data-pipeline\cache-schema-manage\src\main\java\">
             <property name="enableSubPackages" value="true"/>
         </javaClientGenerator>
         <!-- schema即为数据库名 tableName为对应的数据库表 domainObjectName是要生成的实体类 enable*ByExample是否生成 example类   -->
@@ -58,9 +58,11 @@
 <!--               enableSelectByExample="false" selectByExampleQueryId="false"></table>-->
 <!--        <table schema="datahub" tableName="t_dbus_datasource" domainObjectName="DataSource" enableCountByExample="false" enableUpdateByExample="false" enableDeleteByExample="false"-->
 <!--               enableSelectByExample="false" selectByExampleQueryId="false"></table>-->
-        <table schema="datahub" tableName="restore_data_logs" domainObjectName="ParseLogs" enableCountByExample="false" enableUpdateByExample="false" enableDeleteByExample="false"
-               enableSelectByExample="false" selectByExampleQueryId="false"></table>
+            <!--<table schema="datahub" tableName="t_journal_offset" domainObjectName="JournalOffset" enableCountByExample="false" enableUpdateByExample="false" enableDeleteByExample="false"-->
+                    <!--enableSelectByExample="false" selectByExampleQueryId="false"></table>-->
 <!--        <table schema="datahub" tableName="restore_data_logdetails" domainObjectName="ParseLogDetails" enableCountByExample="false" enableUpdateByExample="false" enableDeleteByExample="false"-->
 <!--               enableSelectByExample="false" selectByExampleQueryId="false"></table>-->
+        <table schema="clb_dip_metadata" tableName="etl_histable_partitions_configuration" domainObjectName="EtlPartitionConf" enableCountByExample="false" enableUpdateByExample="false" enableDeleteByExample="false"
+               enableSelectByExample="false" selectByExampleQueryId="false"></table>
     </context>
 </generatorConfiguration>

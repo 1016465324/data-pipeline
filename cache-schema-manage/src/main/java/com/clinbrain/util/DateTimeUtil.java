@@ -39,6 +39,12 @@ public class DateTimeUtil {
 
     }
 
+    public  static String StringToShortDate(String dayStr){
+        int index = dayStr.indexOf(',');
+        int day = -1 == index ? Integer.parseInt(dayStr) : Integer.parseInt(dayStr.substring(0, index));
+        return IntToShortDate(day);
+    }
+
     public  static String IntToTime(int second){
         int sec=second%60;
         int totMin=second/60;
@@ -47,6 +53,12 @@ public class DateTimeUtil {
         String time="";
         return time.format("%s:%s:%s",ToTime(hours),ToTime(min),ToTime(sec));
 
+    }
+
+    public  static String StringToTime(String secondStr){
+        int index = secondStr.indexOf(',');
+        int second = -1 == index ? Integer.parseInt(secondStr) : Integer.parseInt(secondStr.substring(index + 1));
+        return IntToTime(second);
     }
 
     private static String ToTime(int num){

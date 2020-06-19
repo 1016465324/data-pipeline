@@ -43,7 +43,7 @@ object HdfsDataImporter {
          * 分区/非分区 写入
          */
         val data: DataFrameWriter[Row] = insertData.write.format("org.apache.hudi")
-                .option(HoodieWriteConfig.TABLE_NAME, configParam.tableName)
+                .option(HoodieWriteConfig.TABLE_NAME, "%s.%s".format(configParam.database, configParam.tableName))
                 .option(DataSourceWriteOptions.TABLE_NAME_OPT_KEY, configParam.tableName)
                 .option(DataSourceWriteOptions.HIVE_TABLE_OPT_KEY, configParam.tableName)
                 .option(DataSourceWriteOptions.RECORDKEY_FIELD_OPT_KEY, configParam.rowKey)
@@ -53,9 +53,9 @@ object HdfsDataImporter {
                 .option(DataSourceWriteOptions.HIVE_PARTITION_EXTRACTOR_CLASS_OPT_KEY, configParam.partitionExtractorClass)
                 .option(DataSourceWriteOptions.HIVE_SYNC_ENABLED_OPT_KEY, configParam.hiveSyncEnable)
                 .options(allHoodieConfig)
-        if (!"null".equalsIgnoreCase(configParam.partitionColumn)) {
-            data.option(DataSourceWriteOptions.PARTITIONPATH_FIELD_OPT_KEY, configParam.partitionColumn)
-                    .option(DataSourceWriteOptions.HIVE_PARTITION_FIELDS_OPT_KEY, configParam.partitionColumn)
+        if (!"null".equalsIgnoreCase(configParam.hudiPartitionColumn)) {
+            data.option(DataSourceWriteOptions.PARTITIONPATH_FIELD_OPT_KEY, configParam.hudiPartitionColumn)
+                    .option(DataSourceWriteOptions.HIVE_PARTITION_FIELDS_OPT_KEY, configParam.hudiPartitionColumn)
         }
 
         data.mode(if (configParam.saveMode.equalsIgnoreCase(SaveMode.Overwrite.name())) SaveMode.Overwrite else SaveMode.Append)

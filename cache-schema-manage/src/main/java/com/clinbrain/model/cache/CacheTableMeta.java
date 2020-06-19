@@ -12,7 +12,7 @@ public class CacheTableMeta {
     private String columnName;
     private Integer columnId;
     private String dataType;
-    private Integer charLength;
+    private Long charLength;
     private Integer dataPrecision;
     private Integer dataScale;
     private String isPk;
@@ -74,11 +74,11 @@ public class CacheTableMeta {
         this.dataType = dataType;
     }
 
-    public Integer getCharLength() {
+    public Long getCharLength() {
         return charLength;
     }
 
-    public void setCharLength(Integer charLength) {
+    public void setCharLength(Long charLength) {
         this.charLength = charLength;
     }
 

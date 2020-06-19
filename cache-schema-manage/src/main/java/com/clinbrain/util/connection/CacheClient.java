@@ -1,17 +1,21 @@
 package com.clinbrain.util.connection;
 
+import java.sql.Connection;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 
-public class CacheClient extends BasicClient{
+public class CacheClient extends BasicClient {
+
+    private Connection connection;
+    private Statement statement;
+    private ResultSet resultSet;
 
     private static final String driverName = "com.intersys.jdbc.CacheDriver";
 
-    public CacheClient() {
-    }
-
-    public CacheClient(String url, String username , String password) {
-        super.init(driverName, url, username, password);
+    public CacheClient(String url, String username, String password) {
+        super(driverName, url, username, password);
     }
 
     @Override
@@ -32,13 +36,37 @@ public class CacheClient extends BasicClient{
     @Override
     public ResultSet executeQuery(String sql) {
         try {
-            if(stat != null) {
-                return stat.executeQuery(sql);
+            connection = dataSource.getConnection();
+            statement = connection.createStatement();
+            if (statement != null) {
+                resultSet = statement.executeQuery(sql);
             }
-        }catch (Exception e){
-            e.printStackTrace();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
-        return null;
+
+        return resultSet;
     }
 
+    @Override
+    public void close() {
+        try {
+            if (null != resultSet) {
+                resultSet.close();
+                resultSet = null;
+            }
+
+            if (null != statement) {
+                statement.close();
+                statement = null;
+            }
+
+            if (null != connection) {
+                connection.close();
+                connection = null;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }

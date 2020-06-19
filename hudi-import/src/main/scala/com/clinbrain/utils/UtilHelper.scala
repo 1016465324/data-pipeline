@@ -75,19 +75,9 @@ object UtilHelper {
         stringBuilder.append("--user %s ")
         stringBuilder.append("--pass %s ")
 
-        if (!"null".equalsIgnoreCase(configParam.partitionColumn)) {
-            if (configParam.destPath.startsWith("/datalake")) {
-                stringBuilder.append("--partitioned-by date_prt ")
-            } else if (configParam.destPath.startsWith("/datacenter")) {
-                stringBuilder.append("--partitioned-by medorgcode,date_prt ")
-            } else {
-                if (configParam.database.equalsIgnoreCase("dc_db")) {
-                    stringBuilder.append("--partitioned-by medorgcode,date_prt ")
-                } else {
-                    stringBuilder.append("--partitioned-by date_prt ")
-                }
-            }
-
+        if (!"null".equalsIgnoreCase(configParam.hudiPartitionColumn)) {
+            stringBuilder.append("--partitioned-by ")
+            stringBuilder.append(configParam.hivePartitionColumn)
         }
 
         stringBuilder.toString().format(allHoodieConfig("hive.sync.shell.path"), configParam.destPath,

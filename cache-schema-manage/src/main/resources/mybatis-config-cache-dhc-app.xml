@@ -6,7 +6,7 @@
 <configuration>
     <properties>
         <property name="driver" value="com.intersys.jdbc.CacheDriver"/>
-        <property name="url" value="jdbc:Cache://192.168.0.242:1972/DHC-APP"/>
+        <property name="url" value="jdbc:Cache://10.239.2.129:1972/DHC-APP"/>
         <property name="username" value="_SYSTEM"/>
         <property name="password" value="SYS"/>
     </properties>
@@ -20,7 +20,7 @@
             <!-- 数据源，池类型的数据源 -->
             <dataSource type="POOLED">
                 <property name="driver" value="com.intersys.jdbc.CacheDriver" />
-                <property name="url" value="jdbc:Cache://192.168.0.242:1972/DHC-APP" />
+                <property name="url" value="jdbc:Cache://10.239.2.129:1972/DHC-APP" />
                 <property name="username" value="_SYSTEM" />
                 <property name="password" value="sys" />
             </dataSource>

@@ -21,7 +21,7 @@
     <result column="data_length" jdbcType="BIGINT" property="dataLength" />
     <result column="data_precision" jdbcType="INTEGER" property="dataPrecision" />
     <result column="data_scale" jdbcType="INTEGER" property="dataScale" />
-    <result column="char_length" jdbcType="INTEGER" property="charLength" />
+    <result column="char_length" jdbcType="BIGINT" property="charLength" />
     <result column="char_used" jdbcType="VARCHAR" property="charUsed" />
     <result column="nullable" jdbcType="VARCHAR" property="nullable" />
     <result column="is_pk" jdbcType="VARCHAR" property="isPk" />
@@ -78,7 +78,7 @@
       #{columnId,jdbcType=INTEGER}, #{internalColumnId,jdbcType=INTEGER}, #{hiddenColumn,jdbcType=VARCHAR}, 
       #{virtualColumn,jdbcType=VARCHAR}, #{originalSer,jdbcType=INTEGER}, #{dataType,jdbcType=VARCHAR}, 
       #{dataLength,jdbcType=BIGINT}, #{dataPrecision,jdbcType=INTEGER}, #{dataScale,jdbcType=INTEGER}, 
-      #{charLength,jdbcType=INTEGER}, #{charUsed,jdbcType=VARCHAR}, #{nullable,jdbcType=VARCHAR}, 
+      #{charLength,jdbcType=BIGINT}, #{charUsed,jdbcType=VARCHAR}, #{nullable,jdbcType=VARCHAR},
       #{isPk,jdbcType=VARCHAR}, #{pkPosition,jdbcType=INTEGER}, #{alterTime,jdbcType=TIMESTAMP}, 
       #{createTime,jdbcType=TIMESTAMP}, #{comments,jdbcType=VARCHAR}, #{defaultValue,jdbcType=VARCHAR}
       )
@@ -288,7 +288,7 @@
         data_scale = #{dataScale,jdbcType=INTEGER},
       </if>
       <if test="charLength != null">
-        char_length = #{charLength,jdbcType=INTEGER},
+        char_length = #{charLength,jdbcType=BIGINT},
       </if>
       <if test="charUsed != null">
         char_used = #{charUsed,jdbcType=VARCHAR},
@@ -337,7 +337,7 @@
       data_length = #{dataLength,jdbcType=BIGINT},
       data_precision = #{dataPrecision,jdbcType=INTEGER},
       data_scale = #{dataScale,jdbcType=INTEGER},
-      char_length = #{charLength,jdbcType=INTEGER},
+      char_length = #{charLength,jdbcType=BIGINT},
       char_used = #{charUsed,jdbcType=VARCHAR},
       nullable = #{nullable,jdbcType=VARCHAR},
       is_pk = #{isPk,jdbcType=VARCHAR},

@@ -33,6 +33,13 @@
     from t_data_schema
     where id = #{id,jdbcType=INTEGER}
   </select>
+
+  <select id="selectAllDataSchema" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List" />
+    from t_data_schema
+  </select>
+
   <delete id="deleteByPrimaryKey" parameterType="java.lang.Integer">
     <!--
       WARNING - @mbg.generated

@@ -8,9 +8,9 @@
 <!--        <property name="driver" value="com.mysql.cj.jdbc.Driver"/>-->
 <!--        <property name="url" value="jdbc:mysql://192.168.0.240:3306/datahub?useSSL=false&amp;serverTimezone=UTC"/>-->
         <property name="driver" value="com.mysql.jdbc.Driver"/>
-        <property name="url" value="jdbc:mysql://192.168.0.240:3306/datahub?useSSL=false"/>
+        <property name="url" value="jdbc:mysql://10.239.1.71:3306/datahub?useSSL=false&amp;autoReconnect=true"/>
         <property name="username" value="root"/>
-        <property name="password" value="root"/>
+        <property name="password" value="P@ssw0rd"/>
     </properties>
 
     <!-- 环境，可以配置多个，default：指定采用哪个环境 -->
@@ -24,9 +24,9 @@
 <!--                <property name="driver" value="com.mysql.cj.jdbc.Driver" />-->
 <!--                <property name="url" value="jdbc:mysql://192.168.0.240:3306/datahub?useSSL=false&amp;serverTimezone=UTC" />-->
                 <property name="driver" value="com.mysql.jdbc.Driver" />
-                <property name="url" value="jdbc:mysql://192.168.0.240:3306/datahub?useSSL=false" />
+                <property name="url" value="jdbc:mysql://10.239.1.71:3306/datahub?useSSL=false&amp;autoReconnect=true" />
                 <property name="username" value="root" />
-                <property name="password" value="root" />
+                <property name="password" value="P@ssw0rd" />
             </dataSource>
         </environment>
         <environment id="development">
@@ -50,7 +50,6 @@
         <mapper resource="mappers/mysql/DataTableMapper.xml"/>
         <mapper resource="mappers/mysql/StorageSubscriptDefineMapper.xml"/>
         <mapper resource="mappers/mysql/TableMetaMapper.xml"/>
-        <mapper resource="mappers/mysql/ParseLogsMapper.xml"/>
-        <mapper resource="mappers/mysql/ParseLogDetailsMapper.xml"/>
+        <mapper resource="mappers/mysql/JournalOffsetMapper.xml"/>    
     </mappers>
 </configuration>

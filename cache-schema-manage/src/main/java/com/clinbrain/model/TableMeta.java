@@ -145,7 +145,7 @@ public class TableMeta {
      *
      * @mbg.generated
      */
-    private Integer charLength;
+    private Long charLength;
 
     /**
      *
@@ -587,7 +587,7 @@ public class TableMeta {
      *
      * @mbg.generated
      */
-    public Integer getCharLength() {
+    public Long getCharLength() {
         return charLength;
     }
 
@@ -599,7 +599,7 @@ public class TableMeta {
      *
      * @mbg.generated
      */
-    public void setCharLength(Integer charLength) {
+    public void setCharLength(Long charLength) {
         this.charLength = charLength;
     }
 

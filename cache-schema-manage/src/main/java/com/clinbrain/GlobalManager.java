@@ -6,9 +6,11 @@ import com.clinbrain.mapper.*;
 import com.clinbrain.model.*;
 import com.google.common.base.Strings;
 import com.intersys.cache.Dataholder;
+import com.intersys.cache.jbind.JBindDatabase;
 import com.intersys.objects.CacheDatabase;
 import com.intersys.objects.CacheException;
 import com.intersys.objects.Database;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.ibatis.io.Resources;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -33,7 +35,7 @@ import static com.intersys.objects.Database.RET_PRIM;
  * @Version 1.0
  **/
 public class GlobalManager {
-    private Logger logger = LoggerFactory.getLogger(GlobalManager.class);
+    private static Logger logger = LoggerFactory.getLogger(GlobalManager.class);
 
     private DataSource dataSource;
 
@@ -45,11 +47,25 @@ public class GlobalManager {
     private static DataTableMapper dataTableMapper;
     private static TableMetaMapper tableMetaMapper;
 
+    /**
+     * 所有需要处理的表,不全是cache表
+     */
+    private static Map<Integer, List<DataTable>> allDataTableOfDsId;
+    /**
+     * 所有需要同步的表的data source id,不全是cache的数据源
+     */
+    private static Set<Integer> allDataSourceId;
+    /**
+     * cache所有需要同步的表的对应的类
+     */
+    private static Set<String> allClassName;
+
     static {
         InputStream inputStream = null;
         try {
             inputStream = Resources.getResourceAsStream("mybatis-config-mysql-datahub.xml");
         } catch (IOException e) {
+            logger.error(e.getMessage());
             throw new RuntimeException(e);
         }
 
@@ -65,6 +81,25 @@ public class GlobalManager {
         storageSubscriptDefineMapper = sqlSession.getMapper(StorageSubscriptDefineMapper.class);
         dataTableMapper = sqlSession.getMapper(DataTableMapper.class);
         tableMetaMapper = sqlSession.getMapper(TableMetaMapper.class);
+
+        List<DataTable> allDataTable = dataTableMapper.selectAllByStatus();
+        allDataTableOfDsId = allDataTable.stream()
+                .collect(Collectors.groupingBy(DataTable::getDsId));
+        allDataSourceId = allDataTable.stream()
+                .map(DataTable::getDsId)
+                .collect(Collectors.toSet());
+
+        allClassName = allDataTable.stream()
+                .map(DataTable::getClassName)
+                .filter(className -> !Strings.isNullOrEmpty(className))
+                .collect(Collectors.toSet());
+
+        try {
+            inputStream.close();
+        } catch (IOException e) {
+            logger.error(e.getMessage());
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -102,18 +137,17 @@ public class GlobalManager {
     public static Set<String> buildAllGlobalName() {
         return classStorageDefineMapper.selectAllClassStorageDefine().stream()
                 .filter(o -> !Strings.isNullOrEmpty(o.getGlobalName()))
+                .filter(o -> allClassName.contains(o.getClassName()))
                 .map(ClassStorageDefine::getGlobalName)
                 .collect(Collectors.toSet());
     }
 
-    public static Map<String, List<String>> buildGlobalDbMapNamespace(String url, String username, String password) throws CacheException {
+    public static Map<String, List<String>> buildGlobalDbMapNamespace(JBindDatabase database) throws CacheException {
         /**
          * key: global name + "_" + db name
          */
         Map<String, List<String>> globalDbMapNamespace = new HashMap<>(10000);
 
-        Database database = CacheDatabase.getDatabase (url, username, password);
-//        JBindDatabase database = new JBindDatabase(url, username, password);
         String namespaceStr = getNameSpaces(database);
         JSONArray jsonArray = JSONArray.parseArray(namespaceStr);
         for (int i = 0; i < jsonArray.size(); i++) {
@@ -123,7 +157,7 @@ public class GlobalManager {
             JSONArray globalArray = JSONArray.parseArray(globalStr);
             for (int j = 0; j < globalArray.size(); j++) {
                 JSONObject globalObject = globalArray.getJSONObject(j);
-                String key = String.format("%s_%s", globalObject.get("GlobalName"), globalObject.get("DBName"));
+                String key = String.format("^%s_%s", globalObject.get("GlobalName"), globalObject.get("DBName"));
                 List<String> namespaces = globalDbMapNamespace.get(key);
                 if (null == namespaces) {
                     namespaces = new LinkedList<>();
@@ -139,20 +173,21 @@ public class GlobalManager {
         return globalDbMapNamespace;
     }
 
-    private static String getGlobals(Database cacheDatabase, String request) throws CacheException {
+    private static String getGlobals(JBindDatabase cacheDatabase, String request) throws CacheException {
         Dataholder[] args = new Dataholder[1];
         args[0] = new Dataholder(request);
         Dataholder res = cacheDatabase.runClassMethod("ClinBrain.CacheBasic", "GetGlobals", args, RET_PRIM);
         return res.getString();
     }
 
-    private static String getDbs(Database cacheDatabase) throws CacheException {
+    private static String getDbs(JBindDatabase cacheDatabase) throws CacheException {
         Dataholder[] args = new Dataholder[0];
         Dataholder res = cacheDatabase.runClassMethod("ClinBrain.CacheBasic", "GetDBs", args, RET_PRIM);
         return res.getString();
     }
 
-    private static String getNameSpaces(Database cacheDatabase) throws CacheException {
+
+    private static String getNameSpaces(JBindDatabase cacheDatabase) throws CacheException {
         Dataholder[] args = new Dataholder[0];
         Dataholder res = cacheDatabase.runClassMethod("ClinBrain.CacheBasic", "GetNameSpaces", args, RET_PRIM);
         return res.getString();
@@ -162,15 +197,12 @@ public class GlobalManager {
         // key: namespace
         Map<String, GlobalManager> allGlobalManager = new HashMap<>(16);
 
-        List<DataSource> dataSources = dataSourceMapper.selectAllCacheDataSource();
-        Set<Integer> dsIds = dataTableMapper.selectAllByStatus().stream()
-                .map(DataTable::getDsId)
-                .collect(Collectors.toSet());
-        for (DataSource dataSource : dataSources) {
-            if (dsIds.contains(dataSource.getId())) {
-                GlobalManager globalManager = new GlobalManager(dataSource);
+        List<DataSource> allCacheDataSource = dataSourceMapper.selectAllCacheDataSource();
+        for (DataSource cacheDataSource : allCacheDataSource) {
+            if (allDataSourceId.contains(cacheDataSource.getId())) {
+                GlobalManager globalManager = new GlobalManager(cacheDataSource);
                 globalManager.generateRule();
-                allGlobalManager.put(dataSource.getInstanceName(), globalManager);
+                allGlobalManager.put(cacheDataSource.getInstanceName(), globalManager);
             }
         }
 
@@ -180,16 +212,19 @@ public class GlobalManager {
 
     public void generateRule() {
         Map<String, List<StorageSubscriptDefine>> allStorageSubscriptDefine = storageSubscriptDefineMapper.selectAllByDsId(dataSource.getId()).stream()
+                .filter(o -> allClassName.contains(o.getClassName()))
                 .collect(Collectors.groupingBy(StorageSubscriptDefine::getStorageName));
         List<ClassStorageDefine> classStorageDefineList = classStorageDefineMapper.selectAllByDsId(dataSource.getId());
-        Map<String, ClassStorageDefine> allClassStorageDefine = classStorageDefineList
-                .stream().collect(Collectors.toMap(ClassStorageDefine::getStorageName, o -> o));
+        Map<String, ClassStorageDefine> allClassStorageDefine = classStorageDefineList.stream()
+                .filter(o -> allClassName.contains(o.getClassName()))
+                .collect(Collectors.toMap(ClassStorageDefine::getStorageName, o -> o));
 
-        Map<String, List<ClassPropertyDefine>> allClassPropertyDefine = classPropertyDefineMapper
-                .selectAllByDsIdAndStorageName(dataSource.getId()).stream()
+        List<ClassPropertyDefine> classPropertyDefineList = classPropertyDefineMapper.selectAllByDsId(dataSource.getId());
+        Map<String, List<ClassPropertyDefine>> allClassPropertyDefine = classPropertyDefineList.stream()
+                .filter(o -> StringUtils.isNotEmpty(o.getStorageName()) && allClassName.contains(o.getClassName()))
                 .collect(Collectors.groupingBy(ClassPropertyDefine::getStorageName));
 
-        buildAllClassInfo(classStorageDefineList);
+        buildAllClassInfo(classStorageDefineList, classPropertyDefineList);
 
         for (Map.Entry<String, List<StorageSubscriptDefine>> entry : allStorageSubscriptDefine.entrySet()) {
             String storageName = entry.getKey();
@@ -275,16 +310,19 @@ public class GlobalManager {
         }
     }
 
-    private void buildAllClassInfo(List<ClassStorageDefine> classStorageDefineList) {
-        Map<String, List<ClassStorageDefine>> allClassStorageDefineOfClass = classStorageDefineList
-                .stream().collect(Collectors.groupingBy(ClassStorageDefine::getClassName));
-        List<DataTable> dataTables = dataTableMapper.selectAllByDsId(dataSource.getId());
+    private void buildAllClassInfo(List<ClassStorageDefine> classStorageDefineList,
+                                   List<ClassPropertyDefine> classPropertyDefineList) {
+        Map<String, List<ClassStorageDefine>> allClassStorageDefineOfClass = classStorageDefineList.stream()
+//                .filter(o -> allClassName.contains(o.getClassName()))
+                .collect(Collectors.groupingBy(ClassStorageDefine::getClassName));
+        List<DataTable> dataTables = allDataTableOfDsId.get(dataSource.getId());
         Map<String, DataTable> allDataTable = dataTables.stream()
                 .collect(Collectors.toMap(DataTable::getClassName, o -> o));
         Map<String, ClassDefine> allClassDefine = classDefineMapper.selectAllByDsId(dataSource.getId()).stream()
+//                .filter(o -> allClassName.contains(o.getClassName()))
                 .collect(Collectors.toMap(ClassDefine::getClassName, o -> o));
-        Map<String, List<ClassPropertyDefine>> allPropertyDefineOfClass = classPropertyDefineMapper
-                .selectAllByDsId(dataSource.getId()).stream()
+        Map<String, List<ClassPropertyDefine>> allPropertyDefineOfClass = classPropertyDefineList.stream()
+//                .filter(o -> allClassName.contains(o.getClassName()))
                 .collect(Collectors.groupingBy(ClassPropertyDefine::getClassName));
 
         buildAllTableMeta(dataTables);

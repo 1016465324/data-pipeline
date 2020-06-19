@@ -3,9 +3,7 @@ package com.clinbrain.util.connection;
 import com.clinbrain.util.connection.dataSourceUtils.DBUtilOnDbcp;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
 import java.sql.ResultSet;
-import java.sql.Statement;
 import java.util.List;
 
 /**
@@ -13,17 +11,28 @@ import java.util.List;
  */
 public class BasicClient {
 
-    protected static Connection conn;
-    protected static Statement stat;
+    protected DataSource dataSource;
 
-    protected void init(String driverName,String url,String username,String password){
-        try{
-            DataSource dataSource = DBUtilOnDbcp.getDataSouce(driverName, url, username, password); //dbcp
-//            DataSource dataSource = DBUtilOnDruid.getDataSource(driverName, url, username, password); //druid
-            conn = dataSource.getConnection();
-            stat = conn.createStatement();
-        }catch (Exception e){
-            e.printStackTrace();
+    protected String driverName;
+    protected String url;
+    protected String username;
+    protected String password;
+
+
+    protected BasicClient(String driverName, String url, String username, String password) {
+        this.driverName = driverName;
+        this.url = url;
+        this.username = username;
+        this.password = password;
+
+        init();
+    }
+
+    private void init() {
+        try {
+            dataSource = DBUtilOnDbcp.getDataSouce(driverName, url, username, password);
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -39,8 +48,12 @@ public class BasicClient {
         return null;
     }
 
-    protected ResultSet executeQuery(String sql) {
+    public ResultSet executeQuery(String sql) {
         return null;
+    }
+
+    public void close() {
+
     }
 
 }

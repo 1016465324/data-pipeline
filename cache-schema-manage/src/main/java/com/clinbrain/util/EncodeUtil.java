@@ -46,6 +46,10 @@ public class EncodeUtil {
      * @return '木' 26408
      */
     public static String unicodeToString(String str) {
+        if (null == str) {
+            return null;
+        }
+
         Matcher matcher = pattern.matcher(str);
         char ch;
         while (matcher.find()) {

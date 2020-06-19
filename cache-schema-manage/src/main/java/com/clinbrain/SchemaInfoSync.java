@@ -79,7 +79,7 @@ public class SchemaInfoSync {
     private Map<String, Map<String, Set<String>>> allConfigTableInfo;
 
     public SchemaInfoSync(String path) {
-        this.props = UtilHelper.loadProperties(null);
+        this.props = UtilHelper.loadProperties(path);
 
         allConfigTableInfo = new HashMap<>();
         String tableStr = props.getProperty("tables");
@@ -413,6 +413,10 @@ public class SchemaInfoSync {
                                   Map<String, ClassDefine> allClassDefine,
                                   Map<String, List<ClassStorageDefine>> allClassStorageDefine) {
         String dataLocation = classStorageDefine.getDataLocation();
+        if (null == dataLocation) {
+            return null;
+        }
+
         if (dataLocation.startsWith("{%%PARENT}")) {
             ClassDefine classDefine = allClassDefine.get(classStorageDefine.getClassName());
             String parentClass = classDefine.getRuntimeType();
@@ -571,12 +575,14 @@ public class SchemaInfoSync {
             dataTable.setFullpullCondition("");
             dataTable.setIsOpen(0);
             dataTable.setIsAutoComplete(Byte.parseByte("0"));
-            dataTable.setClassId(allClassDefineOfDsId.get(cacheDataTable.getClassName()).getId());
+
+            ClassDefine classDefine = allClassDefineOfDsId.get(cacheDataTable.getClassName());
+            dataTable.setClassId(null == classDefine ? -1 : classDefine.getId());
             dataTable.setClassName(cacheDataTable.getClassName());
             dataTable.setCreateTime(new Date());
 
             return dataTable;
-        }).collect(Collectors.toList());
+        }).filter(dataTable -> dataTable.getClassId() != -1).collect(Collectors.toList());
     }
 
     private List<DataSchema> getAllDataSchema(DataSource dataSource) {

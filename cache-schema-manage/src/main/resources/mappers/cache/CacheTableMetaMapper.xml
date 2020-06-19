@@ -9,7 +9,7 @@
         <result column="column_name" jdbcType="VARCHAR" property="columnName" />
         <result column="column_id" jdbcType="INTEGER" property="columnId" />
         <result column="data_type" jdbcType="VARCHAR" property="dataType" />
-        <result column="charlength" jdbcType="INTEGER" property="charLength" />
+        <result column="charlength" jdbcType="BIGINT" property="charLength" />
         <result column="data_precision" jdbcType="INTEGER" property="dataPrecision" />
         <result column="data_scale" jdbcType="INTEGER" property="dataScale" />
         <result column="is_pk" jdbcType="VARCHAR" property="isPk" />

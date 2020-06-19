@@ -1,7 +1,7 @@
 package com.clinbrain.util.connection.dataSourceUtils;
 
 import com.alibaba.druid.pool.DruidDataSourceFactory;
-import com.clinbrain.util.PopLoadUtils;
+import com.clinbrain.util.UtilHelper;
 import org.apache.commons.lang3.StringUtils;
 
 import javax.sql.DataSource;
@@ -20,7 +20,7 @@ public class DBUtilOnDruid {
 
     private static DataSource init(String driverName, String url, String username, String password){
         try {
-            Properties prop = PopLoadUtils.loadProperties("druid.properties");
+            Properties prop = UtilHelper.loadProperties("druid.properties");
             DataSource dataSource = DruidDataSourceFactory.createDataSource(prop);
             return dataSource;
         }catch (Exception e){

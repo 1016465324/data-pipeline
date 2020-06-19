@@ -1,5 +1,8 @@
 package com.clinbrain;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.clinbrain.mapper.cache.CacheClassDefineMapper;
 import com.clinbrain.mapper.cache.CacheClassPropertyDefineMapper;
 import com.clinbrain.model.cache.CacheClassDefine;
@@ -53,9 +56,9 @@ public class SchemaInfoSyncTest {
 
     @Test
     public void schemaInfoSyncTest() {
-        SchemaInfoSync schemaInfoSync = new SchemaInfoSync(null);
+        SchemaInfoSync schemaInfoSync = new SchemaInfoSync("cache.properties");
         schemaInfoSync.schemaInfoSync(false, false, false,
-                false, true, true, true);
+                false, false, true, true);
     }
 
     @Test
@@ -69,7 +72,34 @@ public class SchemaInfoSyncTest {
         String username="_SYSTEM";
         String password="sys";
 
-        Map<String, List<String>> globalDBMapNamespace = GlobalManager.buildGlobalDbMapNamespace(url, username, password);
+        Map<String, List<String>> globalDBMapNamespace = GlobalManager.buildGlobalDbMapNamespace(null);
         System.out.println(globalDBMapNamespace.size());
+    }
+
+    @Test
+    public void testJson() {
+        String json = "{\n" +
+                "\t\"after\": {\n" +
+                "\t\t\"chartitemid\": \"58\",\n" +
+                "\t\t\"compositecode\": \"V187\",\n" +
+                "\t\t\"episodeid\": \"148297481\",\n" +
+                "\t\t\"id\": \"179426785\",\n" +
+                "\t\t\"instancedataid\": \"6898850||1\",\n" +
+                "\t\t\"patientid\": \"20865884\",\n" +
+                "\t\t\"rowkey\": \"179426785\",\n" +
+                "\t\t\"isdeleted\": 0\n" +
+                "\t},\n" +
+                "\t\"before\": null,\n" +
+                "\t\"current_ts\": \"2020-06-12T15:30:22.500640\",\n" +
+                "\t\"op_ts\": \"2020-06-12T15:23:19.000640\",\n" +
+                "\t\"op_type\": \"I\",\n" +
+                "\t\"pos\": \"691219640\",\n" +
+                "\t\"primary_keys\": [\n" +
+                "\t\t\"rowkey\"\n" +
+                "\t],\n" +
+                "\t\"table\": \"hid0101_cache_his_dhcapp_emrinstance.icompositedesc\"\n" +
+                "}";
+        JSONObject object = JSON.parseObject(json);
+        System.out.println(JSON.toJSONString(object, SerializerFeature.MapSortField, SerializerFeature.WriteMapNullValue));
     }
 }

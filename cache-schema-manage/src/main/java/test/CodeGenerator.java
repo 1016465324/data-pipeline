@@ -20,7 +20,7 @@ public class CodeGenerator {
 
     public static void main(String[] args) {
         List<String> war = new ArrayList<>();
-        File file = new File("D:\\workspace\\data-pipeline\\cache-schema-manage\\src\\main\\java\\test\\generatorConfig.xml");
+        File file = new File("C:\\xhy\\workspace\\data-pipeline\\cache-schema-manage\\src\\main\\java\\test\\generatorConfig.xml");
         ConfigurationParser cp = new ConfigurationParser(war);
         try {
             Configuration config = cp.parseConfiguration(file);
