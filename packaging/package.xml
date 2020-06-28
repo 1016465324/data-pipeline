@@ -9,41 +9,6 @@
     </formats>
     <includeBaseDirectory>true</includeBaseDirectory>
     <fileSets>
-        <fileSet>
-            <directory>../data-capture/src/main/resources</directory>
-            <includes>
-                <include>**/*.*</include>
-            </includes>
-            <outputDirectory>data-capture</outputDirectory>
-        </fileSet>
-        <fileSet>
-            <directory>../data-capture/target/</directory>
-            <includes>
-                <include>*.jar</include>
-            </includes>
-            <outputDirectory>data-capture</outputDirectory>
-        </fileSet>
 
-        <fileSet>
-            <directory>../data-transform/src/main/resources</directory>
-            <includes>
-                <include>**/*.*</include>
-            </includes>
-            <outputDirectory>data-transform</outputDirectory>
-        </fileSet>
-        <fileSet>
-            <directory>../data-transform/target/</directory>
-            <includes>
-                <include>*.jar</include>
-            </includes>
-            <outputDirectory>data-transform</outputDirectory>
-        </fileSet>
-        <fileSet>
-            <directory>../data-transform/target/lib</directory>
-            <includes>
-                <include>*.jar</include>
-            </includes>
-            <outputDirectory>data-transform/lib</outputDirectory>
-        </fileSet>
     </fileSets>
 </assembly>

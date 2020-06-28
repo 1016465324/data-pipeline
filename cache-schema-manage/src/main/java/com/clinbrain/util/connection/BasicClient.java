@@ -28,7 +28,7 @@ public class BasicClient {
         init();
     }
 
-    private void init() {
+    protected void init() {
         try {
             dataSource = DBUtilOnDbcp.getDataSouce(driverName, url, username, password);
         } catch (ClassNotFoundException e) {

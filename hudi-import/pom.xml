@@ -12,11 +12,6 @@
   <artifactId>hudi-import</artifactId>
 
   <properties>
-    <jdk.version>1.8</jdk.version>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <scala.version>2.11.8</scala.version>
-    <scala.compat.version>2.11.8</scala.compat.version>
-    <scala.binary.version>2.11</scala.binary.version>
     <spark.version>2.1.2</spark.version>
     <hoodie.version>0.5.2-incubating</hoodie.version>
   </properties>

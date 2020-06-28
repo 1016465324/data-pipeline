@@ -8,7 +8,7 @@ public class MysqlClient extends BasicClient{
     private static String driverName = "com.mysql.jdbc.Driver";
 
     public MysqlClient(String url, String username, String password) {
-        super.init(driverName, url, username, password);
+        super(driverName, url, username, password);
     }
 
     @Override

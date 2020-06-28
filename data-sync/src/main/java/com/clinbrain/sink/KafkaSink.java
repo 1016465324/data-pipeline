@@ -1,15 +1,13 @@
 package com.clinbrain.sink;
 
-import com.google.common.base.Strings;
-import org.apache.kafka.clients.producer.*;
+import org.apache.kafka.clients.producer.Callback;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import scala.Tuple2;
 
-import java.io.*;
-import java.sql.*;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -29,20 +27,14 @@ public class KafkaSink {
     private static final String JAVA_SECURITY_AUTH_LOGIN_CONFIG = "java.security.auth.login.config";
     private static final String JAVA_SECURITY_KRB5_CONF = "java.security.krb5.conf";
 
-    private Properties props;
     private KafkaProducer<String, String> kafkaProducer;
-    private Map<String, Tuple2<String, String>> topicTableMap;
 
-    private boolean test;
-    private BufferedWriter bufferedWriter;
 
     public KafkaSink() {
-        this(null);
+
     }
 
-    public KafkaSink(String path) {
-        loadConfig(path);
-
+    public KafkaSink(Properties props) {
         Properties producerProps = new Properties();
         producerProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, props.getProperty(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG));
         producerProps.put(ProducerConfig.ACKS_CONFIG, props.getProperty(ProducerConfig.ACKS_CONFIG));
@@ -53,6 +45,8 @@ public class KafkaSink {
         producerProps.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, props.getProperty(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG));
         producerProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, props.getProperty(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG));
         producerProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, props.getProperty(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG));
+        producerProps.put(ProducerConfig.MAX_REQUEST_SIZE_CONFIG, "10485760");
+//        producerProps.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "lz4");
         //kerberos环境下,需额外添加如下配置
         if (Boolean.parseBoolean(props.getProperty(KERBEROS))) {
             System.setProperty(JAVA_SECURITY_AUTH_LOGIN_CONFIG, props.getProperty(JAVA_SECURITY_AUTH_LOGIN_CONFIG));
@@ -64,55 +58,6 @@ public class KafkaSink {
         }
 
         kafkaProducer = new KafkaProducer<>(producerProps);
-    }
-
-    private void queryTopicConfig() {
-        topicTableMap = new HashMap<>(16);
-        try {
-            Class.forName(props.getProperty("driver"));
-            Connection connection = DriverManager.getConnection(props.getProperty("url"),
-                    props.getProperty("user"), props.getProperty("password"));
-            PreparedStatement preparedStatement = connection.prepareStatement(
-                    "select topic_name, topic_partition, table_name from topic_table_map"
-            );
-            ResultSet resultSet = preparedStatement.executeQuery();
-            while (resultSet.next()) {
-                String topicName = resultSet.getString("topic_name");
-                String topicPartition = resultSet.getString("topic_partition");
-                String tableName = resultSet.getString("table_name");
-
-                topicTableMap.put(tableName, new Tuple2<>(topicName, topicPartition));
-            }
-        } catch (ClassNotFoundException | SQLException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /**
-     *
-     * @param path  配置文件路径
-     */
-    private void loadConfig(String path) {
-        InputStream inputStream = null;
-        if (Strings.isNullOrEmpty(path)) {
-            logger.warn("path is empty or null, so load default config.");
-            inputStream = this.getClass().getResourceAsStream("/mq.properties");
-        } else {
-            try {
-                inputStream = new FileInputStream(new File(path));
-            } catch (FileNotFoundException e) {
-                throw new RuntimeException(e);
-            }
-        }
-
-        props = new Properties();
-        try {
-            props.load(inputStream);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-
-        logger.info("load config success. properties:\n{}", props.toString());
     }
 
     public void sendMessage(String topic, String message, String key) {
@@ -143,10 +88,6 @@ public class KafkaSink {
         try {
             if (null != kafkaProducer) {
                 kafkaProducer.close();
-            }
-
-            if (null != bufferedWriter) {
-                bufferedWriter.close();
             }
         } catch (Exception e) {
             logger.error("close kafka producer error. reason: {}", e.getMessage());
